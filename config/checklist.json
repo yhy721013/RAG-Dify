@@ -1,6 +1,15 @@
 {
   "equipment_type": null,
   "review_status": "pending",
-  "checks": [],
-  "note": "阶段 D 前由业务人员确定单一设备类别及最多 6 项检查清单；未配置时不得开始真实评估。"
+  "reviewed_by": "",
+  "reviewed_at": "",
+  "checks": [
+    {"check_id": "guard_hazards", "label": "防护装置自身危险与锐边", "query": "防护装置的设计制造如何避免产生新的危险、暴露锐边、尖角和危险突出物？"},
+    {"check_id": "guard_joints", "label": "连接牢固性", "query": "防护装置的焊接、粘接或机械紧固连接，强度、数量和间距应满足什么要求？"},
+    {"check_id": "guard_access", "label": "调整维护与人机交互", "query": "防护装置设计如何减少人员为调整、润滑或维护而进入危险区，并考虑人机交互？"},
+    {"check_id": "guard_durability", "label": "操作影响与耐久性", "query": "防护装置设计应如何考虑机器操作、被人为弃用的风险及生命周期内的耐久性？"},
+    {"check_id": "fixed_guard", "label": "固定式防护装置安装", "query": "可拆卸的固定式防护装置在没有固定件时能否保持在应有位置，有什么适用前提？"},
+    {"check_id": "movable_guard", "label": "活动式防护装置关闭位置", "query": "活动式防护装置的关闭位置应满足什么要求，可以通过什么方式保持关闭？"}
+  ],
+  "note": "基于当前10条已批准语料拟定的检查覆盖草案，不是违规认定依据。设备类别、检查项仍需业务人员确认；状态pending时工作流拒绝运行。"
 }

@@ -1,4 +1,4 @@
-# 本地运行与阶段 C 联调手册
+# 本地运行与分阶段联调手册
 
 ## 1. 工程与环境
 
@@ -104,3 +104,18 @@ deploy/compose.yml 只定义 evidence-api。填写 DIFY_NETWORK_NAME 为官方 D
 当前无 Docker CLI，Dockerfile 与 Compose 尚未构建或联通验收。容器镜像使用明确版本标签，部署时记录实际 digest。
 SSRF 代理若阻止访问，只放行 evidence-api 等所需域名，不关闭整套防护；必须从 Dify HTTP 节点验证 /health。
 阶段 D 的节点和变量交接见 workflows/workflow-spec.md；未验证前不提供可导入 DSL，也不把模型或真实图片评估记为已完成。
+
+## 8. 阶段 D 当前入口
+
+workflows/workflow-spec.md 是节点、变量和部署绑定的主规格。生成候选时使用本地虚拟环境：
+
+```powershell
+.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode fixed --output data/workflows/fixed-observation.candidate.yml
+.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen2.5-VL-32B-Instruct --evidence-url https://实际受控服务地址
+```
+
+生成器不包含密钥。当前两个候选都已在Dify Cloud成功导入，完整视觉候选保留在未发布工作台；该事实只证明导入兼容，不等同运行验收。
+部署前由业务人员确认 config/checklist.json 的设备类别与检查项，填写真实确认记录；在Dify环境变量中同步 CHECKLIST_JSON。
+两个LLM绑定同一份 start.images 和同一模型。使用同一设备的1～4张实拍图，先执行输入限制反例，再运行完整流程。
+EVIDENCE_API_BASE_URL 必须指向管理员控制、Dify Cloud可达的证据服务；已有Compose内网默认主机名不能直接用于云实例。Bearer值仅通过Dify Secret配置，不放进候选文件或提示词。
+完成固定观察HTTP闭环、真实视觉与评估模型、多图片关联及服务端报告核对后，才导出正式 workflows/safety-assessment.yml。阶段D未验收前不将工作流发布供业务使用。

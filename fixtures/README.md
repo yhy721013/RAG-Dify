@@ -11,4 +11,6 @@ Dify 两类 synthetic fixture 的结构依据固定 tag 1.17.1 的 Service API �
 `dify_cloud/*.real.json` 是 2026-09-18 本轮 Dify Cloud Service API 的 9 份真实脱敏捕获：知识库详情、创建文档、文档列表、索引完成、4 页分块响应和检索响应。
 业务文本／文档名称已替换，UUID 一致映射，人员字段已脱敏；请求和响应的核心字段、枚举、分页及集合形状保留。来源文件哈希和捕获时间见 dify_cloud/provenance.json。
 这些 fixture 用于第三方响应结构回归；原文和分块全文的一一校验依赖本地 data/ 中的实际回读，不能用已删去业务文字的 fixture 代替。
-Workflow 节点 fixture 仍为合成结构示例，真实节点响应与 DSL 导入验证留给阶段 D。
+`dify_workflow_retrieval.real.json` 来自阶段 D 已导入草稿中原生 Knowledge Retrieval 的单步运行：界面显示 SUCCESS、2.542s、开始时间2026-09-18 17:45:03。通过输出编辑器复制完整JSON后，去除标准文字、名称并一致替换UUID；保留5条结果和原生metadata结构。实际命中全部映射回本地条款，首条为5.3.7；本地复查记录见data/workflows/native-retrieval-check.json。这不代表工作流端到端已经通过。
+
+`workflow_input.synthetic.json` 是两张图片元数据与视觉输出的合成结构用例。File.to_dict字段根据固定参考版本 graphon 0.7.0 核查；它不是实拍图片或真实视觉模型输出。

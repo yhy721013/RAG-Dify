@@ -5,8 +5,13 @@
 - 报告编号：{{ report.report_id }}
 - 生成时间：{{ report.created_at }}
 - 设备标识：{{ report.request.equipment_id | safe_text }}
+- 设备类别：{{ (report.request.get('equipment_type') or '未记录') | safe_text }}
+- 设备说明：{{ (report.request.get('equipment_description') or '未提供') | safe_text }}
+- 运行状态：{{ (report.request.get('operating_state') or '未知') | safe_text }}
+- 作业背景：{{ (report.request.get('work_context') or '未提供') | safe_text }}
 - 知识快照：{{ report.snapshot_id | safe_text }}
-- 工作流版本：阶段 A～C 接口调用（尚未接入工作流）
+- 工作流版本：{{ (report.request.get('workflow_version') or '未记录（阶段 A～C 接口调用）') | safe_text }}
+- 模型标识：{{ (report.request.get('model_id') or '未记录') | safe_text }}
 - 技术校验：`validation_passed=true`
 - 状态：`pending_review`，待专业人员复核。
 {% for image in report.request.image_manifest %}

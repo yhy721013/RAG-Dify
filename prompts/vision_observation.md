@@ -14,3 +14,9 @@
 根据可见事实提出少量待检索的风险方向。
 不得生成标准号、条款号、引用原文或最终合规判断。
 只输出指定 JSON 结构；图片 ID 必须来自提供的清单。
+
+scope_status 只能是 same_equipment、different_equipment、uncertain、unreadable。
+无法确认属于同一设备、超出提供的设备类别或图片不可辨认时，不使用 same_equipment；在 scope_reason 说明原因。
+observations 每项包含 image_ids、part、visible_fact、unknowns、check_ids；最多18项。
+check_ids 只能选固定检查清单中的标识，仅表示应检索的方向，不是风险结论；无关联时用空列表。
+unknowns 始终为列表。不要生成 observation_id，它由代码节点分配。

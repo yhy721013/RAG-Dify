@@ -44,9 +44,19 @@ class PrepareRequest(StrictModel):
     image_manifest: list[ImageRef] = Field(min_length=1, max_length=4)
     observations: list[Observation] = Field(min_length=1, max_length=24)
     checks: list[Check] = Field(min_length=1, max_length=6)
+    # 阶段 D 的输入与运行追溯字段；可选以兼容阶段 A～C 请求。
+    equipment_type: str | None = Field(default=None, max_length=100)
+    equipment_description: str | None = Field(default=None, max_length=4000)
+    operating_state: Literal["运行", "停机", "检修", "未知"] | None = None
+    work_context: str | None = Field(default=None, max_length=4000)
+    same_equipment_confirmed: bool | None = None
+    workflow_version: str | None = Field(default=None, max_length=200)
+    model_id: str | None = Field(default=None, max_length=200)
 
     @model_validator(mode="after")
     def references(self):
+        if self.same_equipment_confirmed is False:
+            raise ValueError("未确认同一设备，禁止继续评估")
         def unique(values, label):
             if len(set(values)) != len(values):
                 raise ValueError(f"{label} 不能重复")

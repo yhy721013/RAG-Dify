@@ -16,11 +16,12 @@
 | Dify tag | 1.17.1 为适配源码参考；不声称云实例运行该 tag |
 | Dify 参考源码 commit | tag 1.17.1 → 8387590ace4a094de812b7847fc6a4c3a27cd52b（git ls-remote 核查） |
 | Dify 实例 commit / 容器镜像 | 云服务托管，当前 Knowledge API 未暴露；本项目未部署 Dify 容器 |
-| 嵌入提供方 / 插件版本 | langgenius/siliconflow/siliconflow；版本未由已授权接口暴露 |
+| 嵌入提供方 / 插件版本 | langgenius/siliconflow/siliconflow；阶段D工作台实查插件0.0.61 |
 | 嵌入模型 ID / 实际维度 | Qwen/Qwen3-Embedding-4B；维度未由知识库详情返回，不能把模型默认值写成实测 |
 | Workspace 模型详情查询 | 返回403：当前 dataset scoped key 无此接口授权；未申请扩大密钥权限 |
-| 多模态模型 ID | 未配置（阶段 D） |
-| Workflow DSL 版本 | 未创建，阶段 D，不生成未经验证的 YAML |
+| 多模态模型 ID | 候选暂绑定 Qwen/Qwen2.5-VL-32B-Instruct；工作台标记VISION，真实调用待验收 |
+| Workflow DSL 版本 | 参考0.7.0；固定观察17节点／视觉19节点候选已在云端导入，端到端未验收 |
+| Dify节点契约参考 | tag 1.17.1 的 graphon==0.7.0；只下载wheel阅读源码，未将其安装到证据服务依赖中 |
 | 业务知识快照 | pilot_20260918_01，GB/T 8196-2018 的10条人工批准记录，已激活 |
 | Dify dataset ID | 实际值保存在本地 .env 和 data/manifests/sync_*.json |
 | Dify document ID | 实际值保存在本地同步清单；1个文档、10个分块，重复同步保持不变 |

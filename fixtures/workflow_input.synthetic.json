@@ -1,0 +1,12 @@
+{
+  "provenance": "synthetic; File.to_dict shape checked against graphon 0.7.0 used by Dify 1.17.1, cloud runtime not yet verified",
+  "images": [
+    {"dify_model_identity": "__dify__file__", "id": null, "type": "image", "transfer_method": "local_file", "remote_url": null, "reference": "synthetic-file-1", "filename": "synthetic-front.jpg", "extension": ".jpg", "mime_type": "image/jpeg", "size": 1024, "related_id": "synthetic-file-1", "url": "https://files.invalid/synthetic-front.jpg"},
+    {"dify_model_identity": "__dify__file__", "id": null, "type": "image", "transfer_method": "local_file", "remote_url": null, "reference": "synthetic-file-2", "filename": "synthetic-side.png", "extension": ".png", "mime_type": "image/png", "size": 2048, "related_id": "synthetic-file-2", "url": "https://files.invalid/synthetic-side.png"}
+  ],
+  "vision": {
+    "scope_status": "same_equipment",
+    "scope_reason": "【合成软件测试】两张示例图关联同一设备；不是实际图像识别结果。",
+    "observations": [{"image_ids": ["image_001", "image_002"], "part": "【合成测试】外部防护", "visible_fact": "【合成测试】防护罩局部可见", "unknowns": ["具体工况需确认"], "check_ids": ["guard_hazards"]}]
+  }
+}

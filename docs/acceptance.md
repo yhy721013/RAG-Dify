@@ -1,9 +1,9 @@
 # 分阶段验收记录
 
-目标范围：指南阶段 A～C。当前根目录即指南中的 `mechanical-safety-rag/`。
+目标范围：阶段 A～C 已完成；用户随后明确授权开始阶段 D，不进入阶段 E。当前根目录即指南中的 `mechanical-safety-rag/`。
 所有终端命令使用 PowerShell 7；测试使用 `D:\RAG-Dify\.venv`。
 
-## 当前结论：用户确认范围内阶段 C 已通过（2026-09-18）
+## 阶段 C 结论：用户确认范围内已通过（2026-09-18）
 
 用户在恢复目标后明确选择“以已批准的10条完成本轮阶段 C 验收”。本轮仅使用 GB/T 8196-2018 已签核10条；另外302条候选未自动批准。下方早期“待配置／待复核”内容为历史记录。
 
@@ -36,7 +36,7 @@
 
 真实证据：data/manifests/dify_responses、stage_c_pagination.json、stage_c_health.json，以及 sync_*.json / retrieval_*.json；结构脱敏后的9份真实响应与来源哈希在 fixtures/dify_cloud/。业务库现在为1份标准、10条款、10映射，未生成真实设备报告。
 
-阶段 D/E 仍未实施：Workflow节点真实fixture、DSL导入、图片／模型闭环、Dify HTTP节点联通和完整业务验收均不在本次完成声明内。无答案候选不能直接当成证据支持；当前100%只代表12道已标注可回答题，不代表安全评估准确率。
+阶段C结束时尚未实施D/E；后续阶段D进展见文末。图片／模型闭环、Dify HTTP节点联通和完整业务验收均不在阶段C完成声明内。无答案候选不能直接当成证据支持；当前100%只代表12道已标注可回答题，不代表安全评估准确率。
 
 ## 阶段 A — 已通过模拟验收（2026-09-18）
 
@@ -132,3 +132,28 @@
 - 验证命令：`$env:PYTHONPATH=(Get-Location).Path`，随后 `.\.venv\Scripts\python.exe -B data/evals/validate_annotations.py`。
 - 实际结果：15条 Schema 校验通过；用例 ID/问题无重复、目标 UID 均存在于批准语料、快照一致、来源哈希一致；单题最长48字。未运行真实检索，没有命中率或业务效果结论。
 - 此集合用于阶段C首轮排错，不替代阶段E完整验收集；无答案的候选召回率不等于最终报告误引率，多条款需单独查看全部目标覆盖。
+
+## 阶段 D — 代码及云端导入完成，真实闭环待验收
+
+- 用户已明确授权开始阶段D，AGENTS.md同步更新范围；未扩展至阶段E。
+- 实现纯标准库Code节点：图片／设备范围校验、模型观察校验、固定清单覆盖、原生检索适配、检查项汇总、prepare响应核对、context_id绑定和仅输出服务端报告。
+- 同一份start.images分别连接两个视觉模型；图片ID按上传顺序生成。所有跨服务操作使用HTTP节点，Code不做网络、文件、SQLite或shell操作。
+- prepare新增设备／工况／模型／工作流版本可选字段并写入报告。旧请求不含这些字段时幂等哈希保持原样；四个HTTP接口未增加或改名。
+- 6项检查覆盖草案已写入config/checklist.json，但设备类别与业务确认仍为pending；真实工作流对此拒绝继续。
+- 生成固定观察17节点和完整视觉19节点候选，均标记untested、服务密钥为空；两种候选已通过浏览器在当前Dify Cloud成功导入同一个未发布草稿。当前画布保留完整视觉候选。
+- 原生Knowledge Retrieval节点单步执行：SUCCESS，2.542s，5条结果全部可映射回本地批准条款（5.3.7、1、5.2.1、5.3.1、5.3.3）。真实脱敏输出已进入fixtures。
+- 适配Code节点使用上述真实检索缓存单步执行：SUCCESS，0.128s。没有据此宣称整条Workflow已经成功。
+- 本地 `.venv` 全量验证：96 passed in 3.02s，2条既有第三方弃用警告；新增30项测试覆盖节点参数绑定、生成代码执行、完整／固定两种候选的模拟报告闭环、同设备与图片限制、检查项不得遗漏、真实Workflow响应适配、错误不得冒充空检索和旧请求幂等兼容。
+- DSL参考结构来自Dify 1.17.1 / graphon 0.7.0 / DSL 0.7.0；不凭空猜第三方字段。当前Dify Cloud版本仍未被声称固定到该tag。
+- 尚未取得实拍设备图片、确定设备类别／清单确认、云端可达证据服务地址；未从Dify执行/health、prepare、finalize，也未调用多模态模型完成报告。最终safety-assessment.yml暂不交付。
+- 浏览器导出空白基线时未获得下载文件，因此没有把该导出动作记为交付成功；候选改由官方结构生成，并已用实际云端导入验证。完整运行验收后再导出正式版本。
+
+实际命令：
+
+```powershell
+.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode fixed --output data/workflows/fixed-observation.candidate.yml
+.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml
+.\.venv\Scripts\uv.exe run pytest
+```
+
+待继续所需：设备类别与检查清单确认、同一设备1～4张实拍图片、本项目证据服务的受控HTTPS地址及Dify Secret绑定。Dify工作台登录和模型提供方已经可用，无需重复提供Knowledge API密钥。

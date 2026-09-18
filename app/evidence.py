@@ -6,7 +6,9 @@ from app.schemas import PrepareRequest
 
 
 def prepare(request: PrepareRequest, repo, settings, owner):
-    existing = repo.cached_context(request.model_dump(), owner)
+    # 新增可选追溯字段不能改变既有 A～C 请求的幂等哈希。
+    request_data = request.model_dump(exclude_none=True)
+    existing = repo.cached_context(request_data, owner)
     if existing:
         return existing
     if request.snapshot_id != settings.active_snapshot_id or not repo.snapshot_active(request.snapshot_id):
@@ -46,7 +48,7 @@ def prepare(request: PrepareRequest, repo, settings, owner):
                 "evidence_complete": complete, "completeness_issues": issues,
                 "applicability_context": clause["scope"]}
 
-    payload = {"context_id": "ctx_" + uuid4().hex, "request": request.model_dump(),
+    payload = {"context_id": "ctx_" + uuid4().hex, "request": request_data,
                "snapshot_id": request.snapshot_id, "checks": [], "evidence": []}
     by_clause, used_chars = {}, 0
     for check in request.checks:
@@ -76,4 +78,4 @@ def prepare(request: PrepareRequest, repo, settings, owner):
         payload["checks"].append({"check_id": check.check_id,
                                   "retrieval_status": "matched" if check.hits else "no_match",
                                   "allowed_evidence_ids": allowed, "excluded_evidence": excluded})
-    return repo.save_context(request.model_dump(), payload, owner)
+    return repo.save_context(request_data, payload, owner)
