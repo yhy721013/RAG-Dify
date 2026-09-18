@@ -14,13 +14,15 @@ TOC = re.compile(r"(?:\.{4,}|…{2,}|·{4,})")
 
 
 def candidates(document: dict, data_root: Path) -> list[dict]:
-    output, current = [], None
+    output, current, appendix_section = [], None, None
     for page in document["pages"]:
         for block in page["blocks"]:
             kind, text = block["block_type"], block["text"]
             if kind in {"index", "header", "footer", "page_number", "aside_text"} or TOC.search(text):
                 continue
             appendix, match = APPENDIX.match(text), CLAUSE.match(text)
+            if appendix:
+                appendix_section = appendix.group(1)
             number = appendix.group(1) if appendix else match.group(1) if match else None
             if number or current is None:
                 if current:
@@ -28,6 +30,8 @@ def candidates(document: dict, data_root: Path) -> list[dict]:
                 number = number or f"unassigned_p{page['pdf_page_index']}"
                 parts = number.split(".")
                 path = [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
+                if appendix_section and number[0].isdigit():
+                    path.insert(0, appendix_section)
                 current = {key: document[key] for key in ("source_file_sha256", "source_archive_path", "source_page_count",
                                                          "parser_version", "full_document_covered")}
                 current.update(standard_uid="", standard_code="", standard_name="", edition="", scope="",
@@ -44,11 +48,11 @@ def candidates(document: dict, data_root: Path) -> list[dict]:
                 current["review_issues"].append("figure_or_table_review_required")
     if current:
         output.append(current)
-    counts = Counter(item["clause_no"] for item in output)
+    counts = Counter(tuple(item["clause_path"]) for item in output)
     for item in output:
         if len({span["pdf_page_index"] for span in item["source_spans"]}) > 1:
             item["review_issues"].append("cross_page_review_required")
-        if counts[item["clause_no"]] > 1:
+        if counts[tuple(item["clause_path"])] > 1:
             item["boundary_status"] = "unknown"
             item["review_issues"].append("duplicate_clause_number")
         if not document["full_document_covered"]:

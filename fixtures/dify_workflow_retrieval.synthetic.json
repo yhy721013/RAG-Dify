@@ -1,0 +1,3 @@
+{
+  "result": [{"metadata": {"_source": "knowledge", "dataset_id": "dataset_1", "dataset_name": "synthetic", "document_id": "document_1", "document_name": "synthetic", "segment_id": "segment_1", "score": 0.8, "retriever_from": "workflow"}, "title": "synthetic", "content": "【合成软件测试】"}]
+}

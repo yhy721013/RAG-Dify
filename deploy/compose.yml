@@ -1,0 +1,23 @@
+# 仅新增自定义服务；不重写或缩减 Dify 官方 Compose。
+services:
+  evidence-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: mechanical-safety-evidence:0.1.0
+    env_file:
+      - ../.env
+    environment:
+      APP_DB_PATH: /data/app.db
+      APP_DATA_ROOT: /data
+    volumes:
+      - ../data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - dify
+    restart: unless-stopped
+networks:
+  dify:
+    external: true
+    name: ${DIFY_NETWORK_NAME:?Set the existing Dify execution network name}

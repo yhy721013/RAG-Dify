@@ -19,6 +19,11 @@ def main():
     reviewed = commands.add_parser("import-reviewed")
     reviewed.add_argument("--input", type=Path, required=True)
     reviewed.add_argument("--snapshot", required=True)
+    for name in ("sync-dify", "activate-snapshot"):
+        command = commands.add_parser(name)
+        command.add_argument("--snapshot", required=True)
+    evaluate_parser = commands.add_parser("evaluate-retrieval")
+    evaluate_parser.add_argument("--cases", type=Path, required=True)
     args = parser.parse_args()
     settings = Settings.from_env()
     repo = Repository(settings.db_path)
@@ -32,6 +37,20 @@ def main():
         from ingestion.import_reviewed import import_reviewed
         repo.initialize()
         print(json.dumps(import_reviewed(args.input, args.snapshot, repo, settings), ensure_ascii=False))
+    else:
+        from app.dify_client import DifyClient
+        from evals.evaluate_retrieval import evaluate
+        from ingestion.sync_dify import activate_snapshot, sync_snapshot
+        with DifyClient(settings) as client:
+            if args.command == "sync-dify":
+                result = sync_snapshot(args.snapshot, repo, settings, client)
+            elif args.command == "activate-snapshot":
+                result = activate_snapshot(args.snapshot, repo, settings, client)
+            else:
+                result = evaluate(args.cases, repo, settings, client)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if result.get("passed") is False:
+                raise SystemExit(1)
 
 
 if __name__ == "__main__":

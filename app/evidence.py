@@ -6,6 +6,9 @@ from app.schemas import PrepareRequest
 
 
 def prepare(request: PrepareRequest, repo, settings, owner):
+    existing = repo.cached_context(request.model_dump(), owner)
+    if existing:
+        return existing
     if request.snapshot_id != settings.active_snapshot_id or not repo.snapshot_active(request.snapshot_id):
         raise DomainError("snapshot_not_allowed", "请求的快照未激活或不在允许集合", "snapshot_id", 409)
     if len(request.image_manifest) > settings.max_images or len(request.checks) > settings.max_checks:

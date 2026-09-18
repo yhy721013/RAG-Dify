@@ -1,0 +1,4 @@
+{
+  "query": {"content": "合成测试问题"},
+  "records": [{"score": 0.8, "segment": {"id": "segment_1", "document_id": "document_1", "enabled": true, "status": "completed", "content": "【合成软件测试】", "document": {"id": "document_1", "name": "synthetic"}}}]
+}

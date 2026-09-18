@@ -1,3 +1,4 @@
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def configured(value: str) -> bool:
-    return bool(value.strip()) and not value.startswith("REPLACE_")
+    return bool(value.strip()) and not value.strip().upper().startswith("REPLACE_")
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,17 @@ class Settings:
     dify_timeout_seconds: float = 30
     dify_index_timeout_seconds: float = 600
     dify_poll_seconds: float = 2
+
+    def __post_init__(self):
+        if self.app_env not in {"development", "production", "test"}:
+            raise DomainError("configuration_error", "APP_ENV 只允许 development、production、test")
+        for name, maximum in (("max_images", 4), ("max_checks", 6), ("max_evidence_per_check", 3),
+                              ("max_evidence_text_chars", 100000)):
+            if not 1 <= getattr(self, name) <= maximum:
+                raise DomainError("configuration_error", f"{name} 必须在 1～{maximum} 之间", name)
+        for name in ("dify_timeout_seconds", "dify_index_timeout_seconds", "dify_poll_seconds"):
+            if not math.isfinite(getattr(self, name)) or getattr(self, name) < 0:
+                raise DomainError("configuration_error", "时间配置必须为有限非负数", name)
 
     @classmethod
     def from_env(cls):

@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+.venv
+.venv-mineru
+data
+test_files
+vendor
+tmp
+**/__pycache__
+.pytest_cache

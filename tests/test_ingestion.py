@@ -68,13 +68,26 @@ def test_bad_export(export, tmp_path, mutation):
             adapt(root, source, tmp_path)
 
 
-def test_real_blank_page_omits_blocks(export, tmp_path):
+def test_real_blank_page_omits_blocks(export, tmp_path, monkeypatch):
     root, source, raw = export
-    raw["pages"][0] = {"page_idx": 0}
+    fixture = Path(__file__).resolve().parent.parent / "fixtures/mineru_4_0_2.blank-page.real.json"
+    raw["pages"].append(json.loads(fixture.read_text(encoding="utf-8")))
+    monkeypatch.setattr("ingestion.mineru_adapter.PdfReader", lambda path: SimpleNamespace(pages=[None] * 4))
     (root / "middle_json.json").write_text(json_text(raw), encoding="utf-8")
     document = adapt(root, source, tmp_path)
     assert document["full_document_covered"]
-    assert document["coverage"][0]["status"] == "empty_page_requires_review"
+    assert document["coverage"][3]["status"] == "empty_page_requires_review"
+
+
+def test_appendix_retains_full_identity_path(export, tmp_path):
+    root, source, raw = export
+    raw["pages"][1]["blocks"] = [{"type": "paragraph_title", "index": i, "content": [{"type": "text", "content": text}]}
+                                for i, text in enumerate(["附录 A", "1 附录一", "附录 B", "1 另一个附录一"])]
+    (root / "middle_json.json").write_text(json_text(raw), encoding="utf-8")
+    items = candidates(adapt(root, source, tmp_path), tmp_path)
+    numbered = [item for item in items if item["clause_no"] == "1"]
+    assert [item["clause_path"] for item in numbered] == [["A", "1"], ["B", "1"]]
+    assert all("duplicate_clause_number" not in item["review_issues"] for item in numbered)
 
 
 def test_zip_path_traversal(tmp_path):

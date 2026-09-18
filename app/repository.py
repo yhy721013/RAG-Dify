@@ -95,6 +95,15 @@ class Repository:
                          (payload["context_id"], request["request_id"], request_hash, owner, json_text(payload), now()))
         return payload
 
+    def cached_context(self, request, owner):
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM evidence_contexts WHERE request_id=?", (request["request_id"],)).fetchone()
+        if row is None:
+            return None
+        if row["request_sha256"] != digest(request) or row["owner"] != owner:
+            raise DomainError("idempotency_conflict", "相同 request_id 对应不同内容或调用方", "request_id", 409)
+        return json.loads(row["payload_json"])
+
     def context(self, context_id, owner):
         with self.connect() as conn:
             row = conn.execute("SELECT payload_json FROM evidence_contexts WHERE context_id=? AND owner=?", (context_id, owner)).fetchone()

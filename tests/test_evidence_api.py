@@ -109,6 +109,7 @@ def test_context_copy_and_missing_condition(client, request_body):
     clause["text_verbatim"] = "后续数据变化"
     with repo.connect(write=True) as conn:
         conn.execute("UPDATE clauses SET record_json=? WHERE clause_uid=?", (json_text(clause), clause["clause_uid"]))
+    assert prepared(client, request_body) == context
     response = client.post("/reports/finalize", json=draft_for(context))
     assert response.json()["findings"][0]["citations"][0]["text_verbatim"] != "后续数据变化"
 
@@ -145,3 +146,28 @@ def test_untrusted_text_never_becomes_active_markup(client, request_body):
     report = client.post("/reports/finalize", json=draft).json()
     assert "<script>" not in report["markdown"] and "![外链](" not in report["markdown"]
     assert "&lt;script&gt;" in report["markdown"]
+
+
+def test_evidence_budget_explains_exclusion_without_truncation(client, request_body, settings):
+    with TestClient(create_app(replace(settings, max_evidence_text_chars=1)), headers=AUTH) as limited:
+        context = prepared(limited, request_body)
+        assert context["evidence"] == []
+        check = context["checks"][0]
+        assert check["retrieval_status"] == "matched" and not check["allowed_evidence_ids"]
+        assert check["excluded_evidence"][0]["reason"] == "text_budget_exceeded"
+        report = limited.post("/reports/finalize", json=draft_for(context)).json()
+        assert report["findings"][0]["status"] == "insufficient_evidence"
+
+
+def test_parent_context_is_copied_and_per_check_limit_recorded(client, request_body):
+    repo = client.app.state.repository
+    clause = repo.clause("demo_snapshot", "demo_clause_1")
+    clause["context_clause_uids"] = ["demo_clause_2"]
+    with repo.connect(write=True) as conn:
+        conn.execute("UPDATE clauses SET record_json=? WHERE clause_uid=?", (json_text(clause), clause["clause_uid"]))
+    request_body["checks"][0]["hits"] = [{"dataset_id": "demo_dataset", "document_id": "demo_document", "segment_id": "demo_segment_" + str(i), "score": 0.8} for i in range(1, 5)]
+    context = prepared(client, request_body)
+    assert context["evidence"][0]["context_clauses"][0]["clause_uid"] == "demo_clause_2"
+    assert context["evidence"][0]["evidence_complete"]
+    assert len(context["checks"][0]["allowed_evidence_ids"]) == 3
+    assert context["checks"][0]["excluded_evidence"][0]["reason"] == "max_evidence_per_check"

@@ -42,8 +42,31 @@
 - 首次真实 build 因空白页省略 blocks 失败，修复后成功；结果包含未知边界、跨页和图表复核标记。
 - import-reviewed 的原文／PDF／资产哈希、审批记录、上下文依赖和不可变快照门禁已实现；未导入业务批准快照。
 
-## 阶段 C — 待接入
+## 阶段 C — 离线实现与模拟测试通过，真实联调未验收
 
 - 当前未提供 Dify Service API、知识库密钥、dataset ID 和嵌入模型；未检测到 Docker CLI。
-- 将继续实现离线可验证的同步、映射与评测，不把模拟结果记作真实联调。
+- 已完成离线可验证的同步、映射与评测，不把模拟结果记作真实联调。
 - 真实成功请求、脱敏响应、索引完成、分页回读、一一映射、重跑不重复和真实检索缺一不可。
+
+- 已实现 sync-dify、evaluate-retrieval、activate-snapshot，第三方请求集中在 app/dify_client.py。
+- 已核查 1.17.1 Service API 源码：单数 document/create-by-text、documents/{batch}/indexing-status、分块分页、records[].segment 与 Workflow result[].metadata 的差别。
+- 模拟测试覆盖创建超时后有／无远端文档的对账、重复同步只创建一次、分页、索引失败／超时、漏块／并块／尾块／重复块／文本变化、检索技术失败、条款级评测及激活门禁。
+- 实际命令：`.\.venv\Scripts\uv.exe run pytest` → **60 passed in 2.38s**，2 条第三方弃用警告。
+- 实际命令：`.\.venv\Scripts\uv.exe run python -m app.cli sync-dify --snapshot pilot_20260918_01` → 退出码 1，`configuration_error: DIFY_KNOWLEDGE_BASE_URL` 未配置。这是预期阻塞，未访问任何真实 Dify 知识库。
+- 真实成功请求与响应尚未取得；按指南“缺外部依赖仍继续离线工作”完成了暂定适配和明确标记的合成测试，**不能视为已满足指南先采真实响应再确认契约的现场验收要求**。
+- 未运行真实嵌入或检索，未发布业务知识快照，未配置设备类别／检查清单，未实施阶段 D/E。
+
+## 继续推进所需材料
+
+1. 在本地 .env 配置 Dify Service API 地址、Knowledge API 密钥、专用 dataset ID，并确认中文嵌入模型可用。
+2. 专业人员对候选条款完成原文、边界、图表、必要上下文与版本适用性复核，生成 approved.jsonl。
+3. 根据批准条款提供至少一组真实检索标注，先完成单标准试点，再扩展新的不可变快照。
+
+完整操作顺序见 docs/runbook.md。当前没有将任何真实标准自动标记 approved；data/app.db 中不存在业务条款或报告。
+
+## 补充验证
+
+- 使用 `.venv\Scripts\python.exe` 启动真实 Uvicorn 子进程，在随机本地端口完成四个 HTTP 接口的合成数据闭环并确认匿名查询返回 401；随后停止子进程。运行日志见本地 data/manifests/uvicorn-smoke.log。
+- 该 HTTP 冒烟单独使用合成数据库，不污染业务 app.db；示例导出为 data/reports/synthetic-demo.md 和 .json，全部明确为测试内容。
+- 312 条真实候选全部通过 ClauseRecord Schema 校验；对 candidates.jsonl 执行 import-reviewed 被 review_required 正确拒绝。
+- Compose YAML 仅通过结构检查；没有构建容器或执行 Dify HTTP 节点联通测试。

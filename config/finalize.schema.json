@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Finding": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Check Id",
+          "type": "string"
+        },
+        "observation_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "evidence_supported_risk",
+            "needs_confirmation",
+            "insufficient_evidence"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "risk_description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Risk Description",
+          "type": "string"
+        },
+        "applicability_reason": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Applicability Reason",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "recommendation": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "verification_required": {
+          "items": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Verification Required",
+          "type": "array"
+        }
+      },
+      "required": [
+        "check_id",
+        "observation_ids",
+        "status",
+        "risk_description",
+        "applicability_reason",
+        "evidence_ids",
+        "recommendation",
+        "verification_required"
+      ],
+      "title": "Finding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "context_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "title": "Findings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "context_id",
+    "findings"
+  ],
+  "title": "FinalizeRequest",
+  "type": "object"
+}
