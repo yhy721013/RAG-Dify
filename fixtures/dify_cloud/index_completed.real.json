@@ -1,0 +1,29 @@
+{
+  "provenance": "live_service_api",
+  "created_at": "2026-09-18T07:24:47.657803+00:00",
+  "method": "GET",
+  "path": "datasets/live_id_001/documents/20260918072316675150/indexing-status",
+  "request": {},
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "live_id_003",
+        "indexing_status": "completed",
+        "processing_started_at": 1789716196,
+        "parsing_completed_at": 1789716197,
+        "cleaning_completed_at": 1789716200,
+        "splitting_completed_at": 1789716200,
+        "completed_at": 1789716211,
+        "paused_at": null,
+        "error": null,
+        "error_code": null,
+        "estimated_vector_space_mb": null,
+        "vector_space_limit_mb": null,
+        "stopped_at": null,
+        "completed_segments": 10,
+        "total_segments": 10
+      }
+    ]
+  }
+}

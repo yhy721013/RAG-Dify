@@ -1,0 +1,86 @@
+{
+  "provenance": "live_service_api",
+  "created_at": "2026-09-18T07:23:17.220805+00:00",
+  "method": "POST",
+  "path": "datasets/live_id_001/document/create-by-text",
+  "request": {
+    "json": {
+      "name": "[REDACTED_BUSINESS_TEXT]",
+      "text": "[REDACTED_BUSINESS_TEXT]",
+      "doc_form": "text_model",
+      "doc_language": "Chinese",
+      "indexing_technique": "high_quality",
+      "retrieval_model": {
+        "search_method": "hybrid_search",
+        "reranking_enable": true,
+        "reranking_mode": "weighted_score",
+        "top_k": 5,
+        "score_threshold_enabled": false,
+        "weights": {
+          "weight_type": "customized",
+          "vector_setting": {
+            "vector_weight": 0.5,
+            "embedding_provider_name": "langgenius/siliconflow/siliconflow",
+            "embedding_model_name": "Qwen/Qwen3-Embedding-4B"
+          },
+          "keyword_setting": {
+            "keyword_weight": 0.5
+          }
+        }
+      },
+      "process_rule": {
+        "mode": "custom",
+        "rules": {
+          "pre_processing_rules": [],
+          "segmentation": {
+            "separator": "__RAG_CHUNK_BOUNDARY__",
+            "max_tokens": 1000,
+            "chunk_overlap": 0
+          }
+        }
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "document": {
+      "id": "live_id_003",
+      "position": 1,
+      "data_source_type": "upload_file",
+      "data_source_info": {
+        "upload_file_id": "live_id_004"
+      },
+      "data_source_detail_dict": {
+        "upload_file": {
+          "id": "live_id_004",
+          "name": "[REDACTED_BUSINESS_TEXT]",
+          "size": 5485,
+          "extension": "txt",
+          "mime_type": "text/plain",
+          "created_by": "[REDACTED_PERSON]",
+          "created_at": 1789716196.883596
+        }
+      },
+      "dataset_process_rule_id": "live_id_005",
+      "name": "[REDACTED_BUSINESS_TEXT]",
+      "created_from": "api",
+      "created_by": "[REDACTED_PERSON]",
+      "created_at": 1789716197,
+      "tokens": null,
+      "indexing_status": "waiting",
+      "error": null,
+      "enabled": true,
+      "disabled_at": null,
+      "disabled_by": null,
+      "archived": false,
+      "display_status": "queuing",
+      "word_count": null,
+      "hit_count": 0,
+      "doc_form": "text_model",
+      "doc_metadata": [],
+      "summary_index_status": null,
+      "need_summary": false
+    },
+    "batch": "20260918072316675150"
+  }
+}

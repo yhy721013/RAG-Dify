@@ -1,7 +1,7 @@
 # 检索标注
 
 `retrieval_cases.jsonl` 已准备首轮15题，基于 pilot_20260918_01 已批准的10条 GB/T 8196-2018 条款：10道单条款题、2道多条款题、3道当前快照无答案题。
-这15题由 Codex 初标，用户已明确核对并确认全部预期条款及无答案标注；annotated_by 记录为“Codex 初标；用户（本次对话确认）复核”。尚未执行真实检索，没有命中率结论。
+这15题由 Codex 初标，用户已明确核对并确认全部预期条款及无答案标注；annotated_by 记录为“Codex 初标；用户（本次对话确认）复核”。2026-09-18 已完成真实检索：12 道可回答题 Top-5 全部命中、两个多目标全部找全，3 道无答案题均返回相似候选；没有将相似候选认定为答案。
 每行字段：`case_id`、`snapshot_id`、`query`（1～250 字）、`expected_clause_uids`、`answerable`、`annotated_by`、`annotated_at`。
 UID 使用 import-reviewed 导入后确定的条款身份；无答案问题的 expected_clause_uids 必须为空。
 评测按 Top-5 分块映射为条款后去重计分，同时记录多目标覆盖、无答案候选率和技术失败。
@@ -14,5 +14,8 @@ UID 使用 import-reviewed 导入后确定的条款身份；无答案问题的 e
 准备标注与运行评测分开。先完成条款导入和 sync-dify，再使用本地 `.venv` 执行：
 
 ```powershell
-.\.venv\Scripts\uv.exe run python -m app.cli evaluate-retrieval --cases evals/retrieval_cases.jsonl
+.\.venv\Scripts\uv.exe run python -m app.cli evaluate-retrieval --cases evals/retrieval_cases.jsonl --interval-seconds 7
 ```
+
+interval-seconds 是可选的 0～60 秒请求间隔，默认 0。Dify Cloud 本轮连续检索到第11题后出现403，间隔7秒重跑15题无错误。没有修改任何预期答案、检索权重或阈值以追求通过。
+有技术错误的题组不计算比例（输出 null），避免把失败算成无命中或 0% 候选率。任何技术错误仍阻止发布。

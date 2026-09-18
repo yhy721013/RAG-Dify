@@ -19,7 +19,7 @@ def contract_error(field="response"):
 
 def redact(value):
     if isinstance(value, dict):
-        return {key: ("[REDACTED]" if key.lower() in {"authorization", "api_key", "access_token", "secret", "created_by", "updated_by", "email"}
+        return {key: ("[REDACTED]" if key.lower() in {"authorization", "api_key", "access_token", "secret", "created_by", "updated_by", "disabled_by", "tenant_id", "user_id", "email", "author_name"}
                       else redact(item)) for key, item in value.items()}
     if isinstance(value, list):
         return [redact(item) for item in value]
@@ -84,18 +84,23 @@ class DifyClient:
             raise DomainError("dify_timeout", "Dify 请求超时，技术失败不能当作无命中", status=504) from error
         except httpx.HTTPError as error:
             raise DomainError("infrastructure_error", "Dify 网络调用失败", status=502) from error
-        if not response.is_success:
-            raise DomainError("dify_http_error", f"Dify 返回 HTTP {response.status_code}", status=502)
+        is_json = True
         try:
             payload = response.json()
-        except ValueError as error:
-            raise contract_error() from error
+        except ValueError:
+            is_json = False
+            payload = {"non_json_response": response.text[:1000]}
         self.capture_dir.mkdir(parents=True, exist_ok=True)
         capture = {"provenance": self.provenance, "created_at": now(), "method": method, "path": path,
-                   "request": kwargs, "status": response.status_code, "response": payload}
+                   "request": kwargs, "status": response.status_code, "response": payload,
+                   "retry_after": response.headers.get("retry-after")}
+        serialized = json.dumps(redact(capture), ensure_ascii=False, indent=2)
+        serialized = serialized.replace(self.settings.dify_api_key, "[REDACTED_API_KEY]")
         (self.capture_dir / (uuid4().hex + ".json")).write_text(
-            json.dumps(redact(capture), ensure_ascii=False, indent=2), encoding="utf-8")
-        if not isinstance(payload, dict):
+            serialized, encoding="utf-8")
+        if not response.is_success:
+            raise DomainError("dify_http_error", f"Dify 返回 HTTP {response.status_code}；详情见脱敏请求记录", status=502)
+        if not is_json or not isinstance(payload, dict):
             raise contract_error()
         return payload
 
@@ -152,10 +157,12 @@ class DifyClient:
                 raise DomainError("indexing_timeout", "等待索引完成超时；可重跑恢复，不重复创建", status=504)
             time.sleep(min(self.settings.dify_poll_seconds, max(0, deadline - time.monotonic())))
 
-    def paginated(self, suffix):
+    def paginated(self, suffix, page_size=100):
+        if type(page_size) is not int or not 1 <= page_size <= 100:
+            raise DomainError("input_error", "分页大小必须为 1～100", "page_size")
         page, result, seen = 1, [], set()
         while page <= 10000:
-            payload = self.request("GET", self.path(suffix), params={"page": page, "limit": 100})
+            payload = self.request("GET", self.path(suffix), params={"page": page, "limit": page_size})
             rows = payload.get("data")
             if (not isinstance(rows, list) or type(payload.get("has_more")) is not bool or
                 payload.get("page") != page):
@@ -177,8 +184,8 @@ class DifyClient:
     def documents(self):
         return self.paginated("/documents")
 
-    def segments(self, document_id):
-        return self.paginated("/documents/" + quote(document_id, safe="") + "/segments")
+    def segments(self, document_id, page_size=100):
+        return self.paginated("/documents/" + quote(document_id, safe="") + "/segments", page_size)
 
     def retrieve(self, query, retrieval_model):
         if not isinstance(query, str) or not 1 <= len(query.strip()) <= 250:

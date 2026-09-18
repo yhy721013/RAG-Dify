@@ -1,0 +1,52 @@
+{
+  "provenance": "live_service_api",
+  "created_at": "2026-09-18T07:30:07.485493+00:00",
+  "method": "GET",
+  "path": "datasets/live_id_001/documents/live_id_003/segments",
+  "request": {
+    "params": {
+      "page": 4,
+      "limit": 3
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "live_id_024",
+        "position": 10,
+        "document_id": "live_id_003",
+        "content": "[REDACTED_BUSINESS_TEXT]",
+        "sign_content": "[REDACTED_BUSINESS_TEXT]",
+        "answer": null,
+        "word_count": 306,
+        "tokens": 378,
+        "keywords": null,
+        "index_node_id": "live_id_025",
+        "index_node_hash": "12d829d86a24c5f188bd4785bc4e697e7f04c37821085a88ae1276036bc4d706",
+        "hit_count": 0,
+        "enabled": true,
+        "disabled_at": null,
+        "disabled_by": null,
+        "status": "completed",
+        "created_by": "[REDACTED_PERSON]",
+        "created_at": 1789716197,
+        "updated_at": 1789716197,
+        "updated_by": "[REDACTED_PERSON]",
+        "indexing_at": 1789716200,
+        "completed_at": 1789716205,
+        "error": null,
+        "stopped_at": null,
+        "child_chunks": [],
+        "attachments": [],
+        "summary": null
+      }
+    ],
+    "doc_form": "text_model",
+    "total": 10,
+    "has_more": false,
+    "limit": 3,
+    "page": 4
+  },
+  "retry_after": null
+}

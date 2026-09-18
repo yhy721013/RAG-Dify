@@ -170,7 +170,7 @@ def test_two_separate_retrieval_shapes():
         retrieval_hits(workflow, "dataset_1")
 
 
-def test_clause_unit_evaluation_and_activation(sync_env, tmp_path):
+def test_clause_unit_evaluation_and_activation(sync_env, tmp_path, monkeypatch):
     settings, repo, fake, client = sync_env
     sync_snapshot("pilot", repo, settings, client)
     uids = [row["clause_uid"] for row in repo.all_clauses("pilot")]
@@ -180,7 +180,10 @@ def test_clause_unit_evaluation_and_activation(sync_env, tmp_path):
               "answerable": False, "annotated_by": "synthetic", "annotated_at": "2026-09-18"}]
     path = tmp_path / "cases.jsonl"
     path.write_text("\n".join(json_text(row) for row in cases), encoding="utf-8")
-    result = evaluate(path, repo, settings, client)
+    waits = []
+    monkeypatch.setattr("evals.evaluate_retrieval.time.sleep", waits.append)
+    result = evaluate(path, repo, settings, client, interval_seconds=7)
+    assert waits == [7] and result["request_interval_seconds"] == 7
     assert result["passed"] and result["hit_at_5_rate"] == 1 and result["all_targets_recalled_rate"] == 1
     assert result["no_answer_candidate_rate"] == 0
     with pytest.raises(DomainError):
@@ -189,6 +192,26 @@ def test_clause_unit_evaluation_and_activation(sync_env, tmp_path):
     fake.retrieve_unknown = True
     result = evaluate(path, repo, settings, client)
     assert not result["passed"] and result["error_count"] == 1
+    assert result["hit_at_5_rate"] is None
+
+    def fail_retrieval(*args):
+        raise DomainError("dify_http_error", "synthetic failure")
+    monkeypatch.setattr(client, "retrieve", fail_retrieval)
+    result = evaluate(path, repo, settings, client)
+    assert result["error_count"] == 2 and result["no_answer_candidate_rate"] is None
+
+
+def test_http_failure_is_captured_without_key(sync_env):
+    settings, _, _, _ = sync_env
+    def handle(request):
+        return httpx.Response(403, json={"code": "rate_limit_exceeded", "message": "synthetic-key should be removed"})
+    with DifyClient(settings, httpx.MockTransport(handle)) as client:
+        with pytest.raises(DomainError):
+            client.retrieve("问题", {})
+        records = [json.loads(path.read_text(encoding="utf-8")) for path in client.capture_dir.glob("*.json")]
+        error = next(row for row in records if row["status"] == 403)
+        assert error["response"]["code"] == "rate_limit_exceeded"
+        assert "synthetic-key" not in json.dumps(error)
 
 
 def test_activation_without_evaluation_blocked(sync_env):

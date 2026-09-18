@@ -1,0 +1,57 @@
+{
+  "source": "live Dify Cloud Service API",
+  "captured_on": "2026-09-18",
+  "redactions": [
+    "业务文字和文档名称",
+    "UUID 一致映射",
+    "人员和工作区身份"
+  ],
+  "limitation": "真实分块原文的一一比对在本地 data/ 完成；本 fixture 只用于响应结构契约回归。",
+  "captures": {
+    "dataset.real.json": {
+      "source_capture": "aa7bb91f98d84e6f8d6f38dd6e23d3fa.json",
+      "source_capture_sha256": "d207603cba25da663ed16bd0b1e92e7711ef1d23a25e70030f06074ce4056cb7",
+      "captured_at": "2026-09-18T07:24:39.365541+00:00"
+    },
+    "create.real.json": {
+      "source_capture": "77f910f64f8343bf9aa1686dadf77d3a.json",
+      "source_capture_sha256": "0dab91f9bbdca438caf0ddcc061625d6afb883aa2dacabcd0e7dd615a900a484",
+      "captured_at": "2026-09-18T07:23:17.220805+00:00"
+    },
+    "documents.real.json": {
+      "source_capture": "ad7d463aecfc4ee7854b5f31ace991c9.json",
+      "source_capture_sha256": "5d557546c146ce50b7f823ce83c4bf4e26a594c552679380110671c630c80909",
+      "captured_at": "2026-09-18T07:30:49.723260+00:00"
+    },
+    "index_completed.real.json": {
+      "source_capture": "32fd4b0304d841cf86c4515052c71c29.json",
+      "source_capture_sha256": "a685c744e7c1b1c1746b392e27aad1ab715ca5201065b492b3c86173a5578921",
+      "captured_at": "2026-09-18T07:24:47.657803+00:00"
+    },
+    "retrieve.real.json": {
+      "source_capture": "0a6b50595c164b808f9d6f3573a8f199.json",
+      "source_capture_sha256": "bc80ac31535e3bedc62a78595957c544d05200fb26230f5b8b36ff3aa1b2c1a0",
+      "captured_at": "2026-09-18T07:31:07.964888+00:00"
+    },
+    "segments_page_1.real.json": {
+      "source_capture": "99caf83f2fd945bf89331af475e22715.json",
+      "source_capture_sha256": "6bc91d031ce9818919fb22ee6a44a442802ff0ca9229f04b2b9ded6cb639e3a8",
+      "captured_at": "2026-09-18T07:30:04.534884+00:00"
+    },
+    "segments_page_2.real.json": {
+      "source_capture": "7f95a0701e3c4b9893ebf6bab7ae15df.json",
+      "source_capture_sha256": "0c62c669d3fc704624961a634a28c1b4b7f96ce3c616df240775f54c981ffda9",
+      "captured_at": "2026-09-18T07:30:06.046237+00:00"
+    },
+    "segments_page_3.real.json": {
+      "source_capture": "ebd2d2a7a64748c5beb52002f7bf4668.json",
+      "source_capture_sha256": "fa1d1d87799a93acc1fbe5f1faaa205d7550e94706b7116a09e50ceb6bbafdab",
+      "captured_at": "2026-09-18T07:30:06.948717+00:00"
+    },
+    "segments_page_4.real.json": {
+      "source_capture": "408e123548ad4e3ca0fb87954d720d17.json",
+      "source_capture_sha256": "f5ccf69728d220f16d51f4a8be8dc3b9066668e69a17a9e9200a38210b324277",
+      "captured_at": "2026-09-18T07:30:07.485493+00:00"
+    }
+  }
+}

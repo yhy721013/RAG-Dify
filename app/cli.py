@@ -24,6 +24,7 @@ def main():
         command.add_argument("--snapshot", required=True)
     evaluate_parser = commands.add_parser("evaluate-retrieval")
     evaluate_parser.add_argument("--cases", type=Path, required=True)
+    evaluate_parser.add_argument("--interval-seconds", type=float, default=0, help="评测请求之间的等待秒数，0～60")
     args = parser.parse_args()
     settings = Settings.from_env()
     repo = Repository(settings.db_path)
@@ -47,7 +48,7 @@ def main():
             elif args.command == "activate-snapshot":
                 result = activate_snapshot(args.snapshot, repo, settings, client)
             else:
-                result = evaluate(args.cases, repo, settings, client)
+                result = evaluate(args.cases, repo, settings, client, args.interval_seconds)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             if result.get("passed") is False:
                 raise SystemExit(1)

@@ -3,6 +3,41 @@
 目标范围：指南阶段 A～C。当前根目录即指南中的 `mechanical-safety-rag/`。
 所有终端命令使用 PowerShell 7；测试使用 `D:\RAG-Dify\.venv`。
 
+## 当前结论：用户确认范围内阶段 C 已通过（2026-09-18）
+
+用户在恢复目标后明确选择“以已批准的10条完成本轮阶段 C 验收”。本轮仅使用 GB/T 8196-2018 已签核10条；另外302条候选未自动批准。下方早期“待配置／待复核”内容为历史记录。
+
+| 验收项 | 本轮实际证据 |
+|---|---|
+| 人工复核与来源 | 10条批准记录及15题标注签核哈希均通过复查；来源块、页数、文本哈希与上下文依赖验证通过 |
+| 正式导入与幂等 | import-reviewed 首次 candidate，1份标准／10条；再次 unchanged，条款数量不变 |
+| Dify 异步索引 | 创建成功后等到 indexing_status=completed；仅1次成功创建请求 |
+| 全部分块一一对应 | 10个实际分块与预期10片段的全文、唯一标识和所属条款全部一致 |
+| 真实分页回读 | page_size=3，四页分别3/3/3/1条；合并后映射哈希与数据库一致 |
+| 重复同步 | 同批 sync-dify 再执行后仍为1个远端文档、10个分块，document ID不变 |
+| 真实检索 | 15题完成、0技术错误；12道可回答题Top-5命中率100%，两个多条款题均找全 |
+| 无答案边界 | 3道无答案题均有相似候选（候选率100%）；不能据此补造数值或认定已有答案 |
+| 快照激活 | activate-snapshot 发布前再次回读校验通过；pilot_20260918_01 已激活，.env 已设置 ACTIVE_SNAPSHOT_ID |
+| 本地服务 | 本地真实 Uvicorn 单worker进程 /health 返回200；不是 Dify HTTP 节点联通验收 |
+| 回归测试 | `.\.venv\Scripts\uv.exe run pytest` → **66 passed in 2.32s**，2条第三方弃用警告 |
+
+关键命令：
+
+```powershell
+.\.venv\Scripts\uv.exe run python -m app.cli import-reviewed --input data/reviewed/approved.jsonl --snapshot pilot_20260918_01
+.\.venv\Scripts\uv.exe run python -m app.cli sync-dify --snapshot pilot_20260918_01
+.\.venv\Scripts\uv.exe run python -m app.cli evaluate-retrieval --cases evals/retrieval_cases.jsonl --interval-seconds 7
+.\.venv\Scripts\uv.exe run python -m app.cli activate-snapshot --snapshot pilot_20260918_01
+```
+
+首次连续评测的前10题成功、后5题出现403；失败记录保留在 data/manifests/retrieval_first_attempt_with_403.json。间隔7秒重跑15题全部成功，未修改预期答案、权重或阈值。表现与[官方知识库限流说明](https://docs.dify.ai/versions/3-0-x/zh/user-guide/knowledge-base/knowledge-request-rate-limit)一致，但最初403响应体未保存，不能断言其具体错误码；现已补充失败响应脱敏采集。
+
+另一次 Workspace 模型查询确实返回403 forbidden（dataset scoped key 无授权），这是已捕获的权限错误，与检索突发403分开记录。云服务运行版本、镜像和实际嵌入维度未由现有授权接口暴露，详见 docs/versions.md。
+
+真实证据：data/manifests/dify_responses、stage_c_pagination.json、stage_c_health.json，以及 sync_*.json / retrieval_*.json；结构脱敏后的9份真实响应与来源哈希在 fixtures/dify_cloud/。业务库现在为1份标准、10条款、10映射，未生成真实设备报告。
+
+阶段 D/E 仍未实施：Workflow节点真实fixture、DSL导入、图片／模型闭环、Dify HTTP节点联通和完整业务验收均不在本次完成声明内。无答案候选不能直接当成证据支持；当前100%只代表12道已标注可回答题，不代表安全评估准确率。
+
 ## 阶段 A — 已通过模拟验收（2026-09-18）
 
 - 命令：`.\.venv\Scripts\uv.exe run pytest`
@@ -11,7 +46,7 @@
 - 已验证：固定模拟证据生成报告、原文与哈希回填、虚构／跨上下文／跨检查项引用拒绝、观察越界、无命中保留、不完整证据拒绝确定风险、技术故障、鉴权、真实模式禁用 fixture、幂等冲突、报告重启查询、并行隔离和 Markdown 转义。
 - 报告始终 `pending_review`；测试通过不等于真实安全评估或模型提示注入测试通过。
 
-## 阶段 B — 真实解析与整理已验证，待人工复核
+## 阶段 B — 初次解析与整理记录（签核和正式导入见上方结论）
 
 - 已清点 `test_files` 8 个 PDF，共 218 页。文本层存在：0/3/4/7；无原生文本：1/2/5/6。
 - SHA-256、逐页文本计数见本地 `data/manifests/pdf_inventory.json`；未复核标准适用性。
@@ -42,7 +77,7 @@
 - 首次真实 build 因空白页省略 blocks 失败，修复后成功；结果包含未知边界、跨页和图表复核标记。
 - import-reviewed 的原文／PDF／资产哈希、审批记录、上下文依赖和不可变快照门禁已实现；未导入业务批准快照。
 
-## 阶段 C — 离线实现与模拟测试通过，真实联调未验收
+## 阶段 C — 早期离线实施记录（后续真实验收见上方结论）
 
 - 当前未提供 Dify Service API、知识库密钥、dataset ID 和嵌入模型；未检测到 Docker CLI。
 - 已完成离线可验证的同步、映射与评测，不把模拟结果记作真实联调。

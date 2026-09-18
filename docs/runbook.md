@@ -57,7 +57,8 @@ JSONL 每行一个条款，契约见 config/clause-record.schema.json。逐项�
 在本地 .env 填写 DIFY_KNOWLEDGE_BASE_URL（含实例实际 Service API 前缀，通常 /v1）、DIFY_KNOWLEDGE_API_KEY、DIFY_DATASET_ID。密钥不用发在聊天中。
 管理员创建专用于本快照的 High Quality / General 知识库并验证中文嵌入模型。客户端读取已有嵌入模型身份，使用 Hybrid Search、语义／关键词各 0.5、Top-5、关闭分数阈值；weighted_score 的 reranking_enable=true 不表示额外调用重排模型。
 
-代码依据官方 1.17.1 源码和文档核查；**当前未捕获真实实例响应，仍待真实契约联调**。首次联调先用一份批准标准；成功请求与响应自动保存在 `data/manifests/dify_responses/`（无 Authorization，人员标识脱敏，业务内容仍属本地业务数据）。保存实例 tag/commit、镜像、模型插件、模型 ID 和嵌入维度到 docs/versions.md 后，再验证契约并扩展。
+代码依据官方 1.17.1 源码和文档核查；本轮已通过用户配置的 Dify Cloud 实例完成真实契约联调。请求与成功／失败响应自动保存在 `data/manifests/dify_responses/`（无 Authorization，仍属于本地业务数据）；版本管理中的 fixture 另行去除业务文本与身份信息。
+本轮云服务模型为 Qwen/Qwen3-Embedding-4B。云服务的运行 commit、镜像和插件版本并未由本知识库密钥暴露，不能写成已部署固定版本 1.17.1；实际可确认信息与限制见 docs/versions.md。迁移自建部署时重新锁定并验收。
 
 ```powershell
 .\.venv\Scripts\uv.exe run python -m app.cli sync-dify --snapshot pilot_20260918_01
@@ -73,14 +74,15 @@ JSONL 每行一个条款，契约见 config/clause-record.schema.json。逐项�
 
 ## 5. 检索评测与激活
 
-按 evals/README.md 填写人工标注问题，条款目标必须来自已导入快照。默认 retrieval_cases.jsonl 留空，避免伪造评测。
+按 evals/README.md 填写人工标注问题，条款目标必须来自已导入快照。当前 retrieval_cases.jsonl 为用户已确认的15题，预期答案在真实检索前确定。
 
 ```powershell
-.\.venv\Scripts\uv.exe run python -m app.cli evaluate-retrieval --cases evals/retrieval_cases.jsonl
+.\.venv\Scripts\uv.exe run python -m app.cli evaluate-retrieval --cases evals/retrieval_cases.jsonl --interval-seconds 7
 .\.venv\Scripts\uv.exe run python -m app.cli activate-snapshot --snapshot pilot_20260918_01
 ```
 
 评测保存条款级 Top-5 命中率、多目标完整覆盖、无答案候选率和技术错误；初始门禁为存在可回答标注、命中率 ≥90%、无技术错误。多条款完整性和适用性必须另行复核，少量测试不代表业务能力。
+interval-seconds 为可选参数，默认0；本轮云端评测使用7秒以避免突发请求，未增加自动重试。发生错误的题组比例返回 null，错误响应保存后供定位；不要把403、超时或映射失败解释成无答案。
 激活前会重新回读全部分块并核对快照、数据源、映射和评测哈希；真实环境拒绝合成评测结果。
 激活成功后在 .env 设置 ACTIVE_SNAPSHOT_ID，重启服务。
 
