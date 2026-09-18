@@ -60,6 +60,8 @@ def chunks_for(clauses):
         if clause["content_review_status"] != "approved" or not clause["evidence_complete"] or sha256(clause["text_verbatim"]) != clause["content_sha256"]:
             raise DomainError("review_required", "同步只允许未篡改的批准条款")
         text = re.sub(r"!\[[^\]]*\]\([^)]*\)|<img\b[^>]*>", "", clause["text_verbatim"], flags=re.IGNORECASE)
+        if not text.strip():
+            raise DomainError("mapping_error", "批准条款没有可索引文本：" + clause["clause_uid"], "text_verbatim")
         if BOUNDARY in text or re.search(r"^(CHUNK_UID|CLAUSE_UID):", text, re.MULTILINE):
             raise DomainError("mapping_error", "原文包含保留分隔符或标识行，需人工处理索引格式")
         for index, fragment in enumerate(split_text(text)):
@@ -81,13 +83,14 @@ def verify_segments(segments, chunks, snapshot_id, dataset_id, document_id):
         if (not isinstance(content, str) or segment.get("document_id") != document_id or
             segment.get("enabled") is not True or segment.get("status") != "completed"):
             raise DomainError("mapping_error", "分块不可用或文档身份不一致", status=502)
-        identifiers = MARKER.findall(content)
+        normalized_content = content.replace("\r\n", "\n").strip()
+        identifiers = MARKER.findall(normalized_content)
         if len(identifiers) != 1 or identifiers[0] not in chunks or identifiers[0] in seen:
             raise DomainError("mapping_error", "分块合并、重复、缺少标识或出现未知标识", status=502)
         uid = identifiers[0]
         # 只容忍首尾空白与 CRLF 差异，条款正文变化必须阻止发布。
         expected = chunks[uid]["content"].replace("\r\n", "\n").strip()
-        if content.replace("\r\n", "\n").strip() != expected:
+        if normalized_content != expected:
             raise DomainError("mapping_error", "实际分块内容与预期片段不一致", status=502)
         seen.add(uid)
         mappings.append({"snapshot_id": snapshot_id, "dataset_id": dataset_id, "document_id": document_id,

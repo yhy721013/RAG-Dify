@@ -207,6 +207,24 @@ def test_long_clause_fragments_share_full_clause():
     assert combined == clause["text_verbatim"].strip()
 
 
+def test_segment_crlf_preserves_identity_and_actual_content_hash():
+    from app.repository import sha256
+    chunks = chunks_for([synthetic_clause()])
+    chunk = next(iter(chunks.values()))
+    content = chunk["content"].replace("\n", "\r\n")
+    segment = {"id": "segment_1", "document_id": "document_1", "enabled": True,
+               "status": "completed", "content": content}
+    mappings = verify_segments([segment], chunks, "snapshot_1", "dataset_1", "document_1")
+    assert mappings[0]["clause_uid"] == chunk["clause_uid"]
+    assert mappings[0]["index_text_sha256"] == sha256(content)
+
+
+@pytest.mark.parametrize("text", [" \n\t", "![图表](images/chart.png)"])
+def test_no_approved_clause_silently_lost_from_index(text):
+    with pytest.raises(DomainError, match="没有可索引文本"):
+        chunks_for([synthetic_clause("1"), synthetic_clause("2", text_verbatim=text)])
+
+
 def test_placeholder_config_rejected(settings):
     with pytest.raises(DomainError):
         DifyClient(replace(settings, dify_base_url="REPLACE_WITH_ACTUAL_SERVICE_API_BASE"))
