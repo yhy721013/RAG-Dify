@@ -157,3 +157,13 @@
 ```
 
 待继续所需：设备类别与检查清单确认、同一设备1～4张实拍图片、本项目证据服务的受控HTTPS地址及Dify Secret绑定。Dify工作台登录和模型提供方已经可用，无需重复提供Knowledge API密钥。
+
+## Quick Tunnel 临时入口验证（2026-09-18，独立侧任务）
+
+- 用户明确要求配置并验证Quick Tunnel。使用Cloudflare官方cloudflared 2026.9.1 Windows amd64便携版，SHA-256为2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712，与官方发布元数据一致。
+- 本地证据API仅监听127.0.0.1:8000，使用本项目.venv、1个worker；API和隧道在隐藏后台进程中运行，未安装开机服务。入口地址及进程身份保存在data/quick_tunnel/runtime.json。
+- 实际命令：`.\.venv\Scripts\python.exe -B data/quick_tunnel/verify.py`。HTTPS健康检查200；匿名和错误Bearer请求401；正确Bearer访问不存在报告404，说明鉴权通过；非法prepare载荷422；不存在的finalize上下文404。`.env`和数据库文件路径均404。
+- 证书校验保持开启；公网探针的唯一probe_id可在本地API访问日志中对应到200响应。未新建证据上下文或报告，业务表数量仍为1份标准、10条款、10映射、0上下文、0报告。
+- 启停脚本及操作说明保存在data/quick_tunnel/；停止脚本核对PID和精确启动时间，`-WhatIf`预演仅识别本次3个进程且未改变运行状态。
+- 外部网页抓取工具未能访问该临时URL，因此不把它计为独立外部探针成功。本次已验证经过公网HTTPS入口的实际请求；尚未从Dify HTTP节点执行/health，未修改主任务的Dify工作流或Secret。
+- 此为临时联调入口，电脑或进程退出后不可用，重启会重新分配地址；主任务继续时读取runtime.json的public_url并完成Dify节点验收。
