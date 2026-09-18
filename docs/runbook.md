@@ -103,7 +103,7 @@ SQLite 在本地持久化磁盘上，单实例单 worker；不在 SMB/NFS 上共
 deploy/compose.yml 只定义 evidence-api。填写 DIFY_NETWORK_NAME 为官方 Dify 执行节点可访问的现有网络，然后执行 `docker compose --env-file .env -f deploy/compose.yml up -d --build`。
 当前无 Docker CLI，Dockerfile 与 Compose 尚未构建或联通验收。容器镜像使用明确版本标签，部署时记录实际 digest。
 SSRF 代理若阻止访问，只放行 evidence-api 等所需域名，不关闭整套防护；必须从 Dify HTTP 节点验证 /health。
-阶段 D 的节点和变量交接见 workflows/workflow-spec.md；未验证前不提供可导入 DSL，也不把模型或真实图片评估记为已完成。
+阶段 D 的节点和变量交接见 workflows/workflow-spec.md；正式workflows/safety-assessment.yml已在当前云端环境通过导入及真实完整运行验证，容器部署状态仍与此分开记录。
 
 ## 8. 阶段 D 当前入口
 
@@ -114,14 +114,16 @@ workflows/workflow-spec.md 是节点、变量和部署绑定的主规格。生�
 .\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen3.5-27B --evidence-url https://实际受控服务地址
 ```
 
-生成器不包含密钥。当前固定观察候选已在Dify Cloud通过真实检索／HTTP／报告保存闭环；完整视觉候选已恢复到未发布工作台，尚未完成实拍验收。
-部署前由业务人员确认 config/checklist.json 的设备类别与检查项，填写真实确认记录；在Dify环境变量中同步 CHECKLIST_JSON。
+生成器不包含密钥，始终输出待验证的新候选。当前可直接选择workflows/safety-assessment.yml导入Dify；该正式文件已完成本轮单图、同机双图完整运行及混设备拒绝验收。工作台未发布，导入后先重新绑定Secret和本环境的服务、模型及知识库配置。
+本轮config/checklist.json已由用户确认用于普通卧式金属车床公开图片技术测试；部署到新业务范围前重新确认，并同步CHECKLIST_JSON和User Input设备类别选项。
 两个LLM绑定同一份 start.images 和同一模型。使用同一设备的1～4张实拍图，先执行输入限制反例，再运行完整流程。
 EVIDENCE_API_BASE_URL 必须指向管理员控制、Dify Cloud可达的证据服务；已有Compose内网默认主机名不能直接用于云实例。Bearer值仅通过Dify Secret配置，不放进候选文件或提示词。
 本轮已使用用户提供的Quick Tunnel地址，并经明确授权保存EVIDENCE_API_TOKEN到当前工作流Secret。临时配置载荷已删除。普通无密钥候选重新导入后，务必核对Secret是否保留；星号不代表一定有有效值。
 Quick Tunnel的当前地址在data/quick_tunnel/runtime.json；进程需持续运行。重新启动后按data/quick_tunnel/README.md操作，并更新Dify EVIDENCE_API_BASE_URL。不能直接重启启动脚本覆盖已经运行的服务。
-完成固定观察HTTP闭环、真实视觉与评估模型、多图片关联及服务端报告核对后，才导出正式 workflows/safety-assessment.yml。阶段D未验收前不将工作流发布供业务使用。
+正式workflows/safety-assessment.yml与已实际导入、运行的stage-d-v2候选配置一致，仅统一LF行尾且不包含Secret值；不是Dify原生下载导出的文件。当前只完成技术验收，未将工作流发布供业务使用，进入阶段E需另行开展人工业务评测和内部试用。
 
-公开图片测试资料在 data/stage_d_web/：resources.json记录来源、许可证、尺寸与哈希；input.single.json、input.multi.json、input.mixed-negative.json为表单文本，images路径用于本地选文件，不直接传入API。mixed-negative的预期分类只记录在测试证据中，不能写入模型输入作为答案提示。checklist.proposed.json为六项测试覆盖草案，仍须用户确认后填写真实确认记录并同步到Dify。
+公开图片测试资料在 data/stage_d_web/：resources.json记录来源、许可证、尺寸与哈希；input.single.json、input.multi.json、input.mixed-negative.json为表单文本，images路径用于本地选文件，不直接传入API。mixed-negative的预期分类只记录在测试证据中，不能写入模型输入作为答案提示。checklist.proposed.json保留确认前草案，实际确认记录在checklist-confirmation.json和config/checklist.json。
 本次图片由浏览器从Wikimedia Commons已加载的原始尺寸资源下载；命令行请求返回403时已停止该下载路径。Windows文件选择器使用绝对正斜杠路径，例如 D:/RAG-Dify/data/stage_d_web/images/hwacheon-overview.jpg；每张JPEG均低于5 MiB。
 Qwen/Qwen2.5-VL-32B-Instruct已实测不可用；当前生成器对Qwen/Qwen3.5-27B使用官方插件声明的enable_thinking=false。单步执行超时后需查看浏览器错误日志及运行时间，避免误读上次缓存。单步观察输出不能代替/reports/finalize的完整工作流结果。
+
+本轮完整报告导出为data/reports/stage-d-single-real.md和stage-d-multi-real.md及对应JSON。data/stage_d_web/verify_report.py可在本地.venv中复核指定报告与Dify输出哈希、原文快照、HTTPS查询和重复请求；具体命令见验收记录。stage-d-single-initial-citation-issue.*是修复前不予接受的试运行，保留用于排错，不能与最终验收报告混用。

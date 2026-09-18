@@ -1,7 +1,13 @@
 # 分阶段验收记录
 
-目标范围：阶段 A～C 已完成；用户随后明确授权开始阶段 D，不进入阶段 E。当前根目录即指南中的 `mechanical-safety-rag/`。
+目标范围：阶段 A～D 已完成本轮限定范围内的技术验收，不进入阶段 E。当前根目录即指南中的 `mechanical-safety-rag/`。
 所有终端命令使用 PowerShell 7；测试使用 `D:\RAG-Dify\.venv`。
+
+## 阶段 D 结论：技术闭环与正式DSL已交付（2026-09-19）
+
+用户已确认普通卧式金属车床六项清单，仅使用此前批准的10条语料和公开照片。stage-d-v2的单图、同机双图均完成真实模型、原生检索、HTTPS prepare/finalize及报告保存；混设备在检索前被拒绝。两个模型实际收到相同顺序的两张图片。各报告6项检查、18处引用，原文和哈希均与批准快照一致；Dify输出、SQLite和HTTPS查询一致，重复请求不新增记录，匿名查询401。
+
+交付：workflows/safety-assessment.yml（19节点、无密钥，来自已导入运行验证的候选），本地103项测试通过。详细运行ID、失败修复、命令和SHA-256见文末；下方早期pending及失败状态保留为历史记录。报告仍为pending_review，工作流未发布，视觉误识别和条款适用性仍需专业复核；阶段E业务评测、并发及重启恢复现场验收尚未开展。
 
 ## 阶段 C 结论：用户确认范围内已通过（2026-09-18）
 
@@ -34,7 +40,7 @@
 
 另一次 Workspace 模型查询确实返回403 forbidden（dataset scoped key 无授权），这是已捕获的权限错误，与检索突发403分开记录。云服务运行版本、镜像和实际嵌入维度未由现有授权接口暴露，详见 docs/versions.md。
 
-真实证据：data/manifests/dify_responses、stage_c_pagination.json、stage_c_health.json，以及 sync_*.json / retrieval_*.json；结构脱敏后的9份真实响应与来源哈希在 fixtures/dify_cloud/。业务库现在为1份标准、10条款、10映射，未生成真实设备报告。
+真实证据：data/manifests/dify_responses、stage_c_pagination.json、stage_c_health.json，以及 sync_*.json / retrieval_*.json；结构脱敏后的9份真实响应与来源哈希在 fixtures/dify_cloud/。阶段C结束时业务库为1份标准、10条款、10映射，尚未生成真实设备报告。
 
 阶段C结束时尚未实施D/E；后续阶段D进展见文末。图片／模型闭环、Dify HTTP节点联通和完整业务验收均不在阶段C完成声明内。无答案候选不能直接当成证据支持；当前100%只代表12道已标注可回答题，不代表安全评估准确率。
 
@@ -203,3 +209,29 @@
 - 重新导入后主表单曾出现上传失败；刷新草稿页面后单图上传恢复。使用真实上传图片启动完整Workflow：23:19:53开始，1.833秒、4步、0 tokens，在validate_input以“固定检查清单尚未由业务人员确认”终止，输出为空。这是预期的清单确认门禁验证，不是完整视觉成功；记录见data/stage_d_web/workflow-pending-checklist.real.json。
 
 待继续：用户确认本轮六项检查清单后，运行单图和同机多图的完整检索、评估模型、prepare/finalize流程，验证主流程的混设备拒绝，核对保存报告并导出正式DSL。阶段D尚未完成，未扩展阶段E；公开历史照片不替代现场专业复核。
+
+## 阶段 D — 清单确认与完整流程验收（2026-09-18～19，UI时间为Asia/Tokyo）
+
+- 用户回复“确认”，批准普通卧式金属车床的现有六项清单用于本轮公开图片技术测试。config/checklist.json记录用户确认人和UTC记录时间；六项ID、名称及查询均与确认前草案一致。确认只针对本轮测试覆盖，不代表设备安全结论已获专业复核。
+- 第一轮单图完整Workflow运行SUCCESS：2026-09-18 23:30:09开始，177.213秒，51354 tokens，15个外层执行步骤；运行ID为6ada338e-aa64-4944-be5c-192368c031b1，报告rpt_e6005763f9b24bdb9c1e90acb2fc57c9。真实视觉、6项检索、prepare、评估模型和finalize均已执行。
+- 该初次报告虽通过既有结构校验，但审阅发现模型把证据ID嵌入建议正文，同时把evidence_ids全部留空，导致没有正式条款回填。此报告标记为本轮不予接受的试运行，原记录和导出备份保留，不修改数据库原报告；证据见data/stage_d_web/report-single-initial-citation-issue.json。
+- 最小修复：评估提示词要求引用进入evidence_ids、正文不写证据ID；有相关标准但缺少现场条件时保留引用并使用needs_confirmation。绑定草稿的Code节点拒绝正文中出现服务生成的ev_加32位十六进制ID，阻止以正文代替结构化引用。四个HTTP接口、数据库和服务端既有引用校验不变。
+- 新增4项回归先复现失败，再执行`.\.venv\Scripts\python.exe -X utf8 -m pytest` → **102 passed in 2.79s**，2条既有第三方弃用警告。清单pending反例改为显式构造pending状态，避免依赖业务配置当前是否已确认。
+- 修复后的工作流版本为stage-d-v2；初次试运行保留stage-d-v1。后续真实验收结果继续记录如下。
+- stage-d-v2单图完整运行：2026-09-18 23:42:38开始，SUCCESS，114.266秒、51161 tokens、15个外层执行步骤；运行ID f18b14b5-1e56-4268-b59d-7c8e3ac8711d，报告rpt_3a6f1fdd41b1416797fb4882139ecd7f。6项检查、18处结构化引用，全部回填自允许证据。Markdown SHA-256为e33d46bb9adb842429356cb6938f5e5f477d81d8d039219c6801df47c7b168f8。
+- stage-d-v2同机双图完整运行：2026-09-18 23:48:12开始，SUCCESS，155.579秒、56781 tokens、15个外层执行步骤；运行ID 6d20f2b7-2d31-4a62-9ae6-8a8d69571e83，报告rpt_5bb2c50e656b4a1c99483ed28d05e73b。6项检查、18处引用，Markdown SHA-256为f7e71aaa1b7b6384f5edba42a5942ada36420c61b1e2aef852c771dbca709edb。
+- 双图视觉节点原始输出scope_status=same_equipment，6项原始观察引用image_001及image_002。读取两个LLM节点本次实际输入，文件名、related_id、MIME、大小和顺序完全相同，且与最终报告image_manifest一致；证据见data/stage_d_web/multi-image-binding.real.json，没有保存签名图片URL。
+- 两个报告的Dify输出哈希与SQLite及鉴权HTTPS查询一致；10条不同的引用／依赖条款原文、哈希、标准身份和源页位置均与已批准快照一致。以原始请求重放prepare和finalize返回相同context/report；匿名读取401。运行脚本来源为本地.venv经相同HTTPS入口，原始模型与报告创建来源为Dify Workflow，两类证据分别记录。
+- 完整混设备反例：2026-09-18 23:59:40开始，2026-09-19 00:00:17结束；37.315秒、4398 tokens、6步。即使输入勾选同设备，仍在checks节点因两张照片属于不同设备而终止；未进入Iteration、prepare或finalize，输出为空。前后数据库均为4个上下文、4个报告，包括1份固定观察报告、1份不予接受的初次试运行和2份最终验收报告。
+- 正式交付workflows/safety-assessment.yml，与已导入并运行的候选解析结构和值完全一致，统一UTF-8/LF。候选SHA-256为910ed9a8e0ddd8bcfee4149e1d7c3de067e066dfaff8fc1b950d431584380e99，正式文件SHA-256为fd966928c81076c11d3213a1c12719e6b237240fcfa6f74616bb643c1b06bb97。交付方式为官方结构生成后实际导入和运行验证，不冒称从Dify导出下载成功。
+- 验收文件：data/stage_d_web/workflow-success-runs.real.json、report-single-verification.json、report-multi-verification.json、workflow-mixed-negative.real.json、delivery.json；报告导出为data/reports/stage-d-single-real.*及stage-d-multi-real.*。图片、报告、数据库和凭据均未提交Git；所有一次性凭据载荷均已删除。
+- 正式DSL加入交付回归，防止文件中的关键门禁代码、提示词、确认清单与当前源码脱节，并检查最终输出必经finalize和Secret为空。最终执行`.\.venv\Scripts\python.exe -X utf8 -m pytest` → **103 passed in 3.15s**，2条既有第三方弃用警告；`git diff --check`通过。
+
+持久化、原文及重放验证的实际命令：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -B data/stage_d_web/verify_report.py --case single --report-id rpt_3a6f1fdd41b1416797fb4882139ecd7f --dify-markdown-sha256 e33d46bb9adb842429356cb6938f5e5f477d81d8d039219c6801df47c7b168f8
+.\.venv\Scripts\python.exe -X utf8 -B data/stage_d_web/verify_report.py --case multi --report-id rpt_5bb2c50e656b4a1c99483ed28d05e73b --dify-markdown-sha256 f7e71aaa1b7b6384f5edba42a5942ada36420c61b1e2aef852c771dbca709edb
+```
+
+阶段D技术验收完成。剩余风险：公开图片中的部件、材质和防护状态仍有模型误识别，整改建议及适用性未完成专业业务复核；这两例运行不构成准确率或性能承诺。工作流未发布，Quick Tunnel为临时入口，当前仅一份标准的10条语料；阶段E业务验收、真实现场资料、并发及重启验证、自建容器部署均未因此被宣称完成。

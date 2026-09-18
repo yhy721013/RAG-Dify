@@ -1,8 +1,8 @@
 {
-  "equipment_type": null,
-  "review_status": "pending",
-  "reviewed_by": "",
-  "reviewed_at": "",
+  "equipment_type": "普通卧式金属车床",
+  "review_status": "approved",
+  "reviewed_by": "用户（本次对话确认）",
+  "reviewed_at": "2026-09-18T14:25:13+00:00",
   "checks": [
     {"check_id": "guard_hazards", "label": "防护装置自身危险与锐边", "query": "防护装置的设计制造如何避免产生新的危险、暴露锐边、尖角和危险突出物？"},
     {"check_id": "guard_joints", "label": "连接牢固性", "query": "防护装置的焊接、粘接或机械紧固连接，强度、数量和间距应满足什么要求？"},
@@ -11,5 +11,5 @@
     {"check_id": "fixed_guard", "label": "固定式防护装置安装", "query": "可拆卸的固定式防护装置在没有固定件时能否保持在应有位置，有什么适用前提？"},
     {"check_id": "movable_guard", "label": "活动式防护装置关闭位置", "query": "活动式防护装置的关闭位置应满足什么要求，可以通过什么方式保持关闭？"}
   ],
-  "note": "基于当前10条已批准语料拟定的检查覆盖草案，不是违规认定依据。设备类别、检查项仍需业务人员确认；状态pending时工作流拒绝运行。"
+  "note": "用户已确认本轮公开图片技术测试采用普通卧式金属车床及这六项检查。范围限定为当前10条已批准语料覆盖的防护方向，不代表车床完整安全检查表或现场合规结论；报告仍待专业人员复核。"
 }

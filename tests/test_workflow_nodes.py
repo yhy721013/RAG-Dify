@@ -105,7 +105,9 @@ def test_workflow_rejects_input_scope_errors(workflow_data, problem):
     elif problem == "duplicate":
         args["images"][1]["related_id"] = args["images"][0]["related_id"]
     else:
-        args["checklist_json"] = (ROOT / "config/checklist.json").read_text(encoding="utf-8")
+        checklist = json.loads(args["checklist_json"])
+        checklist["review_status"] = "pending"
+        args["checklist_json"] = json.dumps(checklist, ensure_ascii=False)
     with pytest.raises(ValueError):
         nodes.validate_input(**args)
 
@@ -153,6 +155,18 @@ def test_http_failure_never_emits_model_report():
         nodes.unpack_report(422, '{"markdown":"未经校验的草稿"}', "ctx_1")
     with pytest.raises(ValueError):
         nodes.unpack_report(200, '{"context_id":"ctx_1","validation_passed":false,"review_status":"pending_review"}', "ctx_1")
+
+
+@pytest.mark.parametrize("field", ["risk_description", "applicability_reason", "recommendation", "verification_required"])
+def test_evidence_ids_cannot_bypass_structured_citations(field):
+    evidence_id = "ev_" + "a" * 32
+    context = {"context_id": "ctx_test", "checks": [{"check_id": "guard_joints", "allowed_evidence_ids": [evidence_id]}]}
+    finding = {"check_id": "guard_joints", "observation_ids": ["obs_001"], "status": "insufficient_evidence",
+        "risk_description": "待确认", "applicability_reason": "待确认", "evidence_ids": [],
+        "recommendation": "待确认", "verification_required": ["现场核查"]}
+    finding[field] = ["依据" + evidence_id] if field == "verification_required" else "依据" + evidence_id
+    with pytest.raises(ValueError, match="evidence_ids"):
+        nodes.finalize_payload(json.dumps(context), {"findings": [finding]})
 
 
 def test_code_nodes_do_not_import_network_filesystem_or_application():

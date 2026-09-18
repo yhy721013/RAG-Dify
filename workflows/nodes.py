@@ -251,6 +251,9 @@ def finalize_payload(context_json, assessment_json):
         seen.add(uid)
         if not set(_ids(item["evidence_ids"], "模型证据标识", 0, 3)) <= set(checks[uid]["allowed_evidence_ids"]):
             raise ValueError("模型引用了该检查项未授权的证据")
+        prose = _dump([item[key] for key in ("risk_description", "applicability_reason", "recommendation", "verification_required")])
+        if re.search(r"ev_[0-9a-f]{32}", prose):
+            raise ValueError("证据ID只能写入evidence_ids，不能通过正文绕过结构化引用")
     # 业务状态、完整性、观察归属等仍由 /reports/finalize 权威校验。
     return {"body": _dump({"context_id": context["context_id"], "findings": findings})}
 

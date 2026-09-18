@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from conftest import draft_for
-from workflows.build_candidate import build_candidate
+from workflows.build_candidate import build_candidate, code_text
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -17,6 +17,22 @@ def test_current_siliconflow_vision_model_contract(settings):
     assert all(node["model"]["completion_params"] == {"enable_thinking": False} for node in llms)
     assert all(node["vision"]["configs"]["variable_selector"] == ["start", "images"] for node in llms)
     assert all(node["structured_output_enabled"] for node in llms)
+
+
+def test_delivered_dsl_keeps_current_gates_and_server_report_path():
+    document = json.loads((ROOT / "workflows/safety-assessment.yml").read_text(encoding="utf-8"))
+    graph = document["workflow"]["graph"]
+    nodes = {node["id"]: node["data"] for node in graph["nodes"]}
+    for node_id, function in {"validate_input": "validate_input", "checks": "build_checks",
+                              "finalize_body": "finalize_payload", "unpack_report": "unpack_report"}.items():
+        assert nodes[node_id]["code"] == code_text(function)
+    assert nodes["assessment"]["prompt_template"][0]["text"] == (ROOT / "prompts/risk_assessment.md").read_text(encoding="utf-8")
+    for target, source in {"end": "unpack_report", "unpack_report": "finalize_http", "finalize_http": "finalize_body"}.items():
+        assert [edge["source"] for edge in graph["edges"] if edge["target"] == target] == [source]
+    environment = {item["name"]: item["value"] for item in document["workflow"]["environment_variables"]}
+    assert environment["EVIDENCE_API_TOKEN"] == ""
+    assert json.loads(environment["CHECKLIST_JSON"]) == json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))
+    assert nodes["vision"]["vision"]["configs"]["variable_selector"] == nodes["assessment"]["vision"]["configs"]["variable_selector"] == ["start", "images"]
 
 
 @pytest.mark.parametrize("mode", ["fixed", "vision"])
