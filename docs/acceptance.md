@@ -87,3 +87,13 @@
 - 命令（PowerShell 7）：`$env:PYTHONPATH=(Get-Location).Path`，随后 `.\.venv\Scripts\python.exe -B data/reviewed/gbt8196_review/validate_review.py`。
 - 实际校验：10条 Schema、PDF SHA-256、条款哈希、来源块定位、确定性 UID、上下文引用闭合及无环检查均通过；去除排版空白和页眉页码后，10条均与 PDF 文本层逐字一致。页图已逐页辅助核对。
 - 签核前，在临时数据库中验证未批准材料被 review_required 拒绝；签核后的正式导入和重复导入验证见 validation.json，测试仍只操作临时数据库。未导入业务数据库、未上传到 Dify；业务原文及页图保持在 Git 忽略目录。
+
+## 首轮检索标注准备（2026-09-18）
+
+- 已依据批准的10条语料准备 `evals/retrieval_cases.jsonl`：15题，其中10道单条款题、2道多条款题、3道当前快照无答案题。
+- 10条已批准条款全部有单独用例覆盖；多条款题分别覆盖锐边/连接牢固性、耐久性/关闭位置。无答案题包含本快照没有的螺栓定量要求、安全距离数值和急停要求。
+- 标注在真实检索前确定，未用检索结果反推期望答案。Codex 初标后，用户已明确回复“已核对15题，确认全部预期条款及无答案标注”；复核人沿用“用户（本次对话确认）”，时间和文件哈希详见本地 `data/evals/retrieval_annotation_manifest.json`。
+- 可读问题表与逐题理由在 `data/evals/retrieval_cases_review.md`；标注格式严格保留 RetrievalCase 的7个字段，不把说明文字混入接口契约。
+- 验证命令：`$env:PYTHONPATH=(Get-Location).Path`，随后 `.\.venv\Scripts\python.exe -B data/evals/validate_annotations.py`。
+- 实际结果：15条 Schema 校验通过；用例 ID/问题无重复、目标 UID 均存在于批准语料、快照一致、来源哈希一致；单题最长48字。未运行真实检索，没有命中率或业务效果结论。
+- 此集合用于阶段C首轮排错，不替代阶段E完整验收集；无答案的候选召回率不等于最终报告误引率，多条款需单独查看全部目标覆盖。
