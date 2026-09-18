@@ -1,0 +1,8 @@
+{
+  "request_id": "demo_request",
+  "snapshot_id": "demo_snapshot",
+  "equipment_id": "demo_equipment",
+  "image_manifest": [{"image_id": "image_001", "position": 1, "file_ref": "synthetic-file-001"}],
+  "observations": [{"observation_id": "obs_001", "image_ids": ["image_001"], "visible_fact": "【合成测试】部分传动机构可见", "unknowns": ["是否运行"]}],
+  "checks": [{"check_id": "check_001", "observation_ids": ["obs_001"], "query": "【合成测试】传动机构防护", "hits": [{"dataset_id": "demo_dataset", "document_id": "demo_document", "segment_id": "demo_segment_1", "score": 0.72}]}]
+}

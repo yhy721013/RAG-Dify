@@ -1,0 +1,74 @@
+# 设备安全风险辅助评估报告
+
+## 1. 评估信息
+
+- 报告编号：{{ report.report_id }}
+- 生成时间：{{ report.created_at }}
+- 设备标识：{{ report.request.equipment_id | safe_text }}
+- 知识快照：{{ report.snapshot_id | safe_text }}
+- 工作流版本：阶段 A～C 接口调用（尚未接入工作流）
+- 技术校验：`validation_passed=true`
+- 状态：`pending_review`，待专业人员复核。
+{% for image in report.request.image_manifest %}
+- 图片 {{ image.position }}：{{ image.image_id | safe_text }}（归档标识：{{ image.file_ref | safe_text }}）
+{% endfor %}
+
+## 2. 本次范围与限制
+
+仅覆盖以下 {{ report.findings | length }} 个检查项及其引用标准。试点库不等于全部适用标准。
+图片无法证明全部工况或精确尺寸，不能据此作出设备整体合格结论。
+{% for check in report.request.checks %}
+- {{ check.check_id | safe_text }}：{{ check.query | safe_text }}
+{% endfor %}
+{% for check in report.checks %}{% for excluded in check.excluded_evidence %}
+- {{ check.check_id | safe_text }} 排除条款 {{ excluded.clause_uid | safe_text }}：{{ excluded.reason | safe_text }}
+{% endfor %}{% endfor %}
+
+## 3. 可见事实
+{% for obs in report.request.observations %}
+- {{ obs.observation_id | safe_text }}（图片 {{ obs.image_ids | join(', ') | safe_text }}）：{{ obs.visible_fact | safe_text }}
+{% for unknown in obs.unknowns %}
+  - 待确认：{{ unknown | safe_text }}
+{% endfor %}{% endfor %}
+
+## 4. 风险分析与整改建议
+{% for item in report.findings %}
+### {{ loop.index }}. {{ item.check_id | safe_text }}
+
+- 关联观察：{{ item.observation_ids | join(', ') | safe_text }}
+- 判断状态：{{ item.status }}
+- 风险描述：{{ item.risk_description | safe_text }}
+- 适用性说明：{{ item.applicability_reason | safe_text }}
+- 建议：{{ item.recommendation | safe_text }}
+{% for citation in item.citations %}
+**{{ citation.standard_name | safe_text }}，{{ citation.standard_code | safe_text }}，版本 {{ citation.edition | safe_text }}，条款 {{ citation.clause_no | safe_text }}**
+
+{{ citation.text_verbatim | safe_text }}
+
+原文 SHA-256：{{ citation.content_sha256 }}；归档：{{ citation.source_file_sha256 }}。
+{% for span in citation.source_spans %}
+PDF 第 {{ span.pdf_page_index + 1 }} 页（零基索引 {{ span.pdf_page_index }}），印刷页码 {{ (span.printed_page_label or '未确认') | safe_text }}。
+{% endfor %}
+{% for dependency in citation.context_clauses %}
+必要上下文：{{ dependency.standard_code | safe_text }}，条款 {{ dependency.clause_no | safe_text }}。
+
+{{ dependency.text_verbatim | safe_text }}
+
+原文 SHA-256：{{ dependency.content_sha256 }}。
+{% endfor %}
+{% endfor %}
+{% endfor %}
+
+## 5. 证据不足与补充检查
+{% for item in report.findings %}
+{% if item.status != 'evidence_supported_risk' %}
+- {{ item.check_id | safe_text }}：{{ item.status }}，仍需补充依据或确认条件。
+{% endif %}
+{% for requirement in item.verification_required %}
+- {{ item.check_id | safe_text }}：{{ requirement | safe_text }}
+{% endfor %}{% endfor %}
+
+## 6. 人工复核记录
+
+复核人员：未填写；意见：未复核；日期：未填写。
+技术校验通过不等于业务审核通过或合规认证。

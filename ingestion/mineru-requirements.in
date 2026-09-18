@@ -1,0 +1,2 @@
+# 独立 .venv-mineru；不安装进 API 服务。
+mineru==4.0.2
