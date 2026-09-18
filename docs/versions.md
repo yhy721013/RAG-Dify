@@ -11,9 +11,10 @@
 | SQLite schema_version | 1，五张业务表 |
 | MinerU | 4.0.2，独立 `.venv-mineru` |
 | DocVortex | 0.4.12 |
-| MinerU 档位 | standard 待冒烟；flash txt 仅用于有文本层的样本 |
+| MinerU 档位 | standard 实测扫描样本 10 页；flash txt 实测文本层样本 34+36 页 |
 | Dify tag | 指南参考 1.17.1，未部署／未完成实例验证 |
-| Dify commit / 容器镜像 | 待实际环境记录，不使用 latest |
+| Dify 参考源码 commit | tag 1.17.1 → 8387590ace4a094de812b7847fc6a4c3a27cd52b（git ls-remote 核查） |
+| Dify 实例 commit / 容器镜像 | 尚无实例，待实际环境记录，不使用 latest |
 | 模型插件 / 多模态模型 ID | 未配置（阶段 D） |
 | 嵌入模型 ID / 维度 | 未配置 |
 | Workflow DSL 版本 | 未创建，阶段 D，不生成未经验证的 YAML |

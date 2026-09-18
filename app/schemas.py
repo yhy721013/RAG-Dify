@@ -93,6 +93,7 @@ class SourceSpan(StrictModel):
 
 
 class ClauseRecord(StrictModel):
+    snapshot_id: str = ""
     standard_uid: str = ""
     standard_code: str = ""
     standard_name: str = ""

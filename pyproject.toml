@@ -10,10 +10,11 @@ dependencies = [
   "jinja2>=3.1,<4",
   "uvicorn>=0.34,<1",
   "python-dotenv>=1.1,<2",
+  "pypdf>=5,<7",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<10", "pypdf>=5,<7", "uv>=0.8,<1"]
+dev = ["pytest>=8.3,<10", "uv>=0.8,<1"]
 
 [tool.uv]
 package = false
