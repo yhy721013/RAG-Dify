@@ -1,6 +1,6 @@
 # Workflow 实施规格（阶段 D，真实闭环待验收）
 
-阶段 D 已获用户明确授权。固定观察17节点和完整视觉19节点候选已在 Dify Cloud 导入；原生检索和适配 Code 节点已单步成功。尚无真实图片／模型／证据服务 HTTP 全链路验收，因此不创建最终 `safety-assessment.yml`，候选始终标记 untested。
+阶段 D 已获用户明确授权。固定观察17节点已在 Dify Cloud 跑通检索、证据准备、定稿和报告输出的完整HTTP闭环；完整视觉19节点已恢复为未发布草稿。真实图片与多模态模型闭环仍未验收，因此不创建最终 `safety-assessment.yml`，视觉候选继续标记 untested。
 
 工作台草稿名称为“机械设备安全评估（阶段D）”，未发布；应用标识和本地候选哈希保存在 data/workflows/，不作为公共访问凭据。
 
@@ -57,9 +57,11 @@
 输出为JSON形式的合法YAML，结构来自固定版本的官方DSL/节点模型，不新增YAML依赖。当前参考DSL版本0.7.0；两种候选均已在本轮云实例成功导入。生成器拒绝直接写最终 safety-assessment.yml。
 fixed 模式仅使用明确标记为软件联通测试的固定观察和固定结果，不能作为真实设备评估；vision 模式才包含真实视觉与评估节点。初始全链路未通过前不要发布应用。
 
-管理员需绑定 EVIDENCE_API_BASE_URL、EVIDENCE_API_TOKEN（Secret）、SNAPSHOT_ID、DATASET_ID、CHECKLIST_JSON、WORKFLOW_VERSION、MODEL_ID。导入文件中的密钥始终为空；环境变量值不写进用户输入或模型提示词。模型ID环境变量必须与两个LLM节点实际模型一致。
+管理员需绑定 EVIDENCE_API_BASE_URL、EVIDENCE_API_TOKEN（Secret）、SNAPSHOT_ID、DATASET_ID、CHECKLIST_JSON、WORKFLOW_VERSION、MODEL_ID。常规候选和最终交付文件中的密钥始终为空；环境变量值不写进用户输入或模型提示词。模型ID环境变量必须与两个LLM节点实际模型一致。
+本轮已取得用户对该服务密钥及当前Dify工作流的明确授权，通过一次性本地配置载荷绑定Secret；两份载荷均在导入成功后删除，不纳入Git，也未把密钥输出到聊天或写入模型提示词。普通候选生成器仍不写密钥。重新导入无密钥候选时需保留或重新绑定Secret，不能以界面的星号显示判断鉴权是否有效。
 目前设备类别和6项检查清单为 pending 草案，不能用于真实评估。候选暂绑定当前工作区已显示支持VISION的 Qwen/Qwen2.5-VL-32B-Instruct，尚未实测模型调用；可按用户选择调整。
 
 当前候选 URL 默认 `http://evidence-api:8000` 只适用于接入同一网络的自建 Dify。当前使用 Dify Cloud，必须改为管理员提供且受控可达的 HTTPS 服务地址；不要假定云节点能访问本机或容器主机名。
-无论采用哪种部署，都必须从 Dify HTTP 节点执行 `/health`；宿主机测试不能替代此验收。完整运行时，prepare、finalize及响应校验均不可绕过。
+无论采用哪种部署，都必须从 Dify HTTP 节点执行 `/health`；宿主机测试不能替代此验收。本轮通过用户配置的Quick Tunnel已完成该验证，TLS校验保持开启。临时地址与进程记录在data/quick_tunnel/runtime.json，重启分配新地址后需更新Dify环境变量并重新验证。
+固定观察测试的 /evidence/prepare、/reports/finalize 均由Dify HTTP节点实际调用，最终Markdown哈希与SQLite保存版本一致。完整运行时，这两个接口及响应校验均不可绕过。该结果未使用真实照片或生成模型，不能替代视觉工作流验收。
 真实 Workflow 检索 fixture 已保存为 fixtures/dify_workflow_retrieval.real.json，与 Knowledge API records[].segment 分开适配。实拍、多图片关联、模型结构化输出和最终服务端报告全部验证后，才交付正式 DSL。

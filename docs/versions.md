@@ -20,7 +20,8 @@
 | 嵌入模型 ID / 实际维度 | Qwen/Qwen3-Embedding-4B；维度未由知识库详情返回，不能把模型默认值写成实测 |
 | Workspace 模型详情查询 | 返回403：当前 dataset scoped key 无此接口授权；未申请扩大密钥权限 |
 | 多模态模型 ID | 候选暂绑定 Qwen/Qwen2.5-VL-32B-Instruct；工作台标记VISION，真实调用待验收 |
-| Workflow DSL 版本 | 参考0.7.0；固定观察17节点／视觉19节点候选已在云端导入，端到端未验收 |
+| Workflow DSL 版本 | 参考0.7.0；固定观察17节点已通过真实Dify检索／HTTP／持久化闭环，视觉19节点仍待实拍验收 |
+| 临时证据服务入口 | 用户配置的Cloudflare Quick Tunnel；实际地址和进程记录见data/quick_tunnel/runtime.json，Dify端HTTPS健康检查已通过 |
 | Dify节点契约参考 | tag 1.17.1 的 graphon==0.7.0；只下载wheel阅读源码，未将其安装到证据服务依赖中 |
 | 业务知识快照 | pilot_20260918_01，GB/T 8196-2018 的10条人工批准记录，已激活 |
 | Dify dataset ID | 实际值保存在本地 .env 和 data/manifests/sync_*.json |

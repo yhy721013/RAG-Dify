@@ -145,7 +145,7 @@
 - 适配Code节点使用上述真实检索缓存单步执行：SUCCESS，0.128s。没有据此宣称整条Workflow已经成功。
 - 本地 `.venv` 全量验证：96 passed in 3.02s，2条既有第三方弃用警告；新增30项测试覆盖节点参数绑定、生成代码执行、完整／固定两种候选的模拟报告闭环、同设备与图片限制、检查项不得遗漏、真实Workflow响应适配、错误不得冒充空检索和旧请求幂等兼容。
 - DSL参考结构来自Dify 1.17.1 / graphon 0.7.0 / DSL 0.7.0；不凭空猜第三方字段。当前Dify Cloud版本仍未被声称固定到该tag。
-- 尚未取得实拍设备图片、确定设备类别／清单确认、云端可达证据服务地址；未从Dify执行/health、prepare、finalize，也未调用多模态模型完成报告。最终safety-assessment.yml暂不交付。
+- 本次初始实现时尚未取得实拍设备图片、确定设备类别／清单确认及云端可达地址；后续HTTP闭环进展见文末。仍未调用多模态模型完成实拍报告，最终safety-assessment.yml暂不交付。
 - 浏览器导出空白基线时未获得下载文件，因此没有把该导出动作记为交付成功；候选改由官方结构生成，并已用实际云端导入验证。完整运行验收后再导出正式版本。
 
 实际命令：
@@ -156,7 +156,7 @@
 .\.venv\Scripts\uv.exe run pytest
 ```
 
-待继续所需：设备类别与检查清单确认、同一设备1～4张实拍图片、本项目证据服务的受控HTTPS地址及Dify Secret绑定。Dify工作台登录和模型提供方已经可用，无需重复提供Knowledge API密钥。
+当前待继续所需：设备类别与检查清单确认、同一设备1～4张实拍图片。Dify工作台登录、HTTPS入口与Secret绑定均已就绪，无需重复提供Knowledge API密钥。
 
 ## Quick Tunnel 临时入口验证（2026-09-18，独立侧任务）
 
@@ -167,3 +167,19 @@
 - 启停脚本及操作说明保存在data/quick_tunnel/；停止脚本核对PID和精确启动时间，`-WhatIf`预演仅识别本次3个进程且未改变运行状态。
 - 外部网页抓取工具未能访问该临时URL，因此不把它计为独立外部探针成功。本次已验证经过公网HTTPS入口的实际请求；尚未从Dify HTTP节点执行/health，未修改主任务的Dify工作流或Secret。
 - 此为临时联调入口，电脑或进程退出后不可用，重启会重新分配地址；主任务继续时读取runtime.json的public_url并完成Dify节点验收。
+
+## 阶段 D — Quick Tunnel 与固定观察完整闭环（2026-09-18）
+
+- 读取并核对用户提供的Quick Tunnel运行记录，API launcher、listener和cloudflared三个PID与启动时间均一致，HTTPS /health实测200。
+- 将用户提供的地址绑定到当前Dify草稿EVIDENCE_API_BASE_URL；从Dify HTTP节点执行/health：SUCCESS、HTTP200、0.615s，SSL验证开启。证据见data/workflows/dify-http-health.json。
+- 初始业务探针在Dify内部失败：API key was empty，未发出业务请求。界面的Secret星号不能证明实际有值。
+- 用户明确授权将本地.env的现有EVIDENCE_API_TOKEN保存到当前工作流同名Secret。使用仅包含该项服务凭据的一次性本地配置载荷完成绑定，Knowledge API密钥未包含其中；两份用于固定观察和恢复视觉草稿的载荷均已删除，未进入Git或聊天内容。
+- 固定观察17节点在Dify完成整次测试运行，状态SUCCESS，开始时间2026-09-18 19:48:49，运行12.300s。原生检索后依次执行prepare、finalize和服务端结果输出；本地API日志对应GET /health、POST /evidence/prepare、POST /reports/finalize均为200。
+- 测试运行ID：e1476c2f-2f20-4b3f-b1a8-e7d7d96d6e08；报告ID：rpt_5cee5f30bc244fb491c0df9dffe3cd83。报告为固定观察的软件联通测试，model_id=fixed-response-no-model，未使用真实照片或多模态模型。
+- Dify输出Markdown的SHA-256为cb9f1a8e9f7550b853f70e20024b4e0f1c0ffc593637ff387315009a008b1774，与SQLite和HTTPS GET /reports读取结果完全相同；5条不同的引用／上下文条款原文及哈希均与批准快照一致。
+- 最终状态validation_passed=true、review_status=pending_review；匿名查询报告401，授权查询200。通过本地.venv经同一HTTPS入口重放相同prepare和finalize，仍返回同一context/report，记录数保持1个上下文、1个软件测试报告。
+- 本地证据：data/workflows/fixed-workflow-verification.json；报告导出：data/reports/stage-d-fixed-smoke.md和.json。所有业务内容保留在Git忽略目录。
+- 已恢复完整视觉19节点草稿并保留HTTPS和Secret，仍未发布。恢复后的单步调试曾因Dify缓存输入缺失未发出请求，不计为额外HTTP验收；完整固定观察运行及随后HTTPS重放的成功证据分别记录来源。
+- 本轮未改应用代码或依赖，因此没有重复跑96项既有单元测试；实际联调与持久化复核均使用Dify节点及本项目.venv。
+
+剩余条件：明确设备类别并确认检查清单，提供同一台设备的实拍图片后，继续验证真实视觉、评估模型、多图片关联和最终正式DSL。Quick Tunnel是临时入口，本次12.3s仅是一例实测，不是吞吐或时延承诺。

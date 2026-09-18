@@ -114,8 +114,10 @@ workflows/workflow-spec.md 是节点、变量和部署绑定的主规格。生�
 .\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen2.5-VL-32B-Instruct --evidence-url https://实际受控服务地址
 ```
 
-生成器不包含密钥。当前两个候选都已在Dify Cloud成功导入，完整视觉候选保留在未发布工作台；该事实只证明导入兼容，不等同运行验收。
+生成器不包含密钥。当前固定观察候选已在Dify Cloud通过真实检索／HTTP／报告保存闭环；完整视觉候选已恢复到未发布工作台，尚未完成实拍验收。
 部署前由业务人员确认 config/checklist.json 的设备类别与检查项，填写真实确认记录；在Dify环境变量中同步 CHECKLIST_JSON。
 两个LLM绑定同一份 start.images 和同一模型。使用同一设备的1～4张实拍图，先执行输入限制反例，再运行完整流程。
 EVIDENCE_API_BASE_URL 必须指向管理员控制、Dify Cloud可达的证据服务；已有Compose内网默认主机名不能直接用于云实例。Bearer值仅通过Dify Secret配置，不放进候选文件或提示词。
+本轮已使用用户提供的Quick Tunnel地址，并经明确授权保存EVIDENCE_API_TOKEN到当前工作流Secret。临时配置载荷已删除。普通无密钥候选重新导入后，务必核对Secret是否保留；星号不代表一定有有效值。
+Quick Tunnel的当前地址在data/quick_tunnel/runtime.json；进程需持续运行。重新启动后按data/quick_tunnel/README.md操作，并更新Dify EVIDENCE_API_BASE_URL。不能直接重启启动脚本覆盖已经运行的服务。
 完成固定观察HTTP闭环、真实视觉与评估模型、多图片关联及服务端报告核对后，才导出正式 workflows/safety-assessment.yml。阶段D未验收前不将工作流发布供业务使用。
