@@ -1,0 +1,24 @@
+[project]
+name = "mechanical-safety-rag"
+version = "0.1.0"
+description = "机械设备安全评估的轻量证据服务与离线入库工具"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "httpx>=0.28,<1",
+  "jinja2>=3.1,<4",
+  "uvicorn>=0.34,<1",
+  "python-dotenv>=1.1,<2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "pypdf>=5,<7", "uv>=0.8,<1"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

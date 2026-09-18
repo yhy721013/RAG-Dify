@@ -1,0 +1,15 @@
+.venv/
+.venv-mineru/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.env
+.env.*
+!.env.example
+data/
+test_files/
+vendor/
+tmp/
+*.egg-info/
+dist/
+.coverage
