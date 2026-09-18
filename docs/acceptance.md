@@ -183,3 +183,23 @@
 - 本轮未改应用代码或依赖，因此没有重复跑96项既有单元测试；实际联调与持久化复核均使用Dify节点及本项目.venv。
 
 剩余条件：明确设备类别并确认检查清单，提供同一台设备的实拍图片后，继续验证真实视觉、评估模型、多图片关联和最终正式DSL。Quick Tunnel是临时入口，本次12.3s仅是一例实测，不是吞吐或时延承诺。
+
+## 阶段 D — 公开图片资源与真实视觉节点测试（2026-09-18）
+
+- 用户授权自行检索、下载实际测试文本与图片。指定Chrome当前未连接，工具清单只显示内置浏览器；已说明替代方式，并通过内置浏览器继续Dify测试。未宣称使用了Chrome。
+- 下载3张Wikimedia Commons真实摄影文件：Glenn McKechnie的Hwacheon整机图（1816×1401，237887字节）和同机主轴箱近照（1644×1443，221665字节），以及Greudin的另一台EMCO普通车床图（761×591，124046字节）。前两张采用CC BY-SA 3.0，后一张由作者释放至公有领域。原样下载，本地未裁剪、改绘或合成；近照本身含源作者标注与局部去色。
+- 命令行访问源站返回403机器人访问限制，转由浏览器pageAssets取得已加载的原始尺寸图片；大小、JPEG头、尺寸和哈希均在本项目.venv核查。整机和负例的SHA-1与来源页记录一致。三图的来源、作者、许可证和SHA-256已进入fixtures/stage_d_public_images.provenance.json，图片文件留在Git忽略目录data/stage_d_web/images/。
+- 基于来源说明准备input.single.json、input.multi.json、input.mixed-negative.json及checklist.proposed.json。运行及现场条件填写未知，不将网上说明当作标准证据。混图负例的输入不透露预期分类。固定清单拟采用普通卧式金属车床的现有六项防护方向；确认问题已提交用户，未收到答复前仍为pending，没有冒填人工复核人。
+- 首次真实图片调用：Qwen/Qwen2.5-VL-32B-Instruct，22:54:41开始，2.237秒，FAIL；提供方403、code=30003、Model disabled，0 tokens。不作为业务无风险结果；官方服务调整公告也列出该旧模型下线。
+- 换用同一提供方Qwen/Qwen3.5-27B。真实单图LLM单步：22:57:24开始，SUCCESS，47.004秒，4996 tokens；VisionResult Schema通过。原始观察包含把黄色防护构件识别为灯架等错误，已记录vision_error，未自动改写原始模型输出。
+- 第一次双图单步请求超时，浏览器在2026-09-18T14:02:10.997Z记录TimeoutError。界面随后显示单图旧SUCCESS缓存；已逐字段核对输出相同，没有将它误计为双图通过；后端是否继续执行未知。
+- 官方插件qwen3.5-27b.yaml（blob c5aa85ed1271fef6473bb3e002467d7d237dfcb5）声明vision和enable_thinking。Dify中显式设置enable_thinking=false后，双图实测23:05:30开始，SUCCESS，24.868秒，5963 tokens，无reasoning_content；scope_status=same_equipment，观察关联image_001和image_002，未引用清单外check_id。仍存在部件标号误识别，不据此声称风险判断准确。
+- 混设备单步：23:09:08开始，SUCCESS，24.680秒，4154 tokens；scope_status=different_equipment，并区分HWACHEON与EMCO。模型的其他观察文字仍有误识别，此次只验证范围分类，不当成整条Workflow负例执行成功。
+- 三次成功单步、旧模型失败及双图超时均保留独立本地记录：data/stage_d_web/vision-*.json。取得真实Dify的#files#元数据，加入脱敏fixture及契约回归；不保存签名文件URL或租户标识到Git。
+- 最小代码变更仅更新候选默认模型，并为该提供方/模型显式关闭思考参数；两个视觉节点保持同一start.images绑定、原结构化Schema和错误终止方式。既有四个HTTP接口及业务数据库契约未改变。
+- 完整19节点草稿已重新导入，同步两个模型节点与MODEL_ID并保留既有HTTPS和已授权Secret。草稿未发布，清单仍pending。一次性凭据载荷导入后删除，普通候选无密钥。Dify切换模型时会清空图片变量选择的现象已写入运行手册，生成器继续固定两个图片绑定。
+- 实际测试命令：`.\.venv\Scripts\python.exe -m pytest tests/test_workflow_nodes.py tests/test_workflow_candidate.py` → 31 passed；模型参数契约测试加入后，`.\.venv\Scripts\python.exe -m pytest` → **98 passed in 2.83s**，2条既有第三方弃用警告。公开图片输出另经本地VisionResult及图片/检查项ID边界核对。
+- 本轮上述LLM单步未执行prepare/finalize，未新建报告；数据库仍为1个固定观察软件测试上下文、1个固定观察报告。单步真实模型与此前固定观察闭环不能拼接冒充一次完整真实视觉报告。
+- 重新导入后主表单曾出现上传失败；刷新草稿页面后单图上传恢复。使用真实上传图片启动完整Workflow：23:19:53开始，1.833秒、4步、0 tokens，在validate_input以“固定检查清单尚未由业务人员确认”终止，输出为空。这是预期的清单确认门禁验证，不是完整视觉成功；记录见data/stage_d_web/workflow-pending-checklist.real.json。
+
+待继续：用户确认本轮六项检查清单后，运行单图和同机多图的完整检索、评估模型、prepare/finalize流程，验证主流程的混设备拒绝，核对保存报告并导出正式DSL。阶段D尚未完成，未扩展阶段E；公开历史照片不替代现场专业复核。

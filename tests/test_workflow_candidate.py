@@ -9,6 +9,16 @@ from workflows.build_candidate import build_candidate
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_current_siliconflow_vision_model_contract(settings):
+    checklist = json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))
+    document = build_candidate(settings, checklist, "langgenius/siliconflow/siliconflow", "Qwen/Qwen3.5-27B", "https://example.test")
+    llms = [node["data"] for node in document["workflow"]["graph"]["nodes"] if node["data"]["type"] == "llm"]
+    assert len(llms) == 2
+    assert all(node["model"]["completion_params"] == {"enable_thinking": False} for node in llms)
+    assert all(node["vision"]["configs"]["variable_selector"] == ["start", "images"] for node in llms)
+    assert all(node["structured_output_enabled"] for node in llms)
+
+
 @pytest.mark.parametrize("mode", ["fixed", "vision"])
 def test_candidate_code_and_bindings_execute_to_saved_report(client, settings, mode):
     checklist = json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))

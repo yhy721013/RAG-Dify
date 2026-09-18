@@ -19,10 +19,11 @@
 | 嵌入提供方 / 插件版本 | langgenius/siliconflow/siliconflow；阶段D工作台实查插件0.0.61 |
 | 嵌入模型 ID / 实际维度 | Qwen/Qwen3-Embedding-4B；维度未由知识库详情返回，不能把模型默认值写成实测 |
 | Workspace 模型详情查询 | 返回403：当前 dataset scoped key 无此接口授权；未申请扩大密钥权限 |
-| 多模态模型 ID | 候选暂绑定 Qwen/Qwen2.5-VL-32B-Instruct；工作台标记VISION，真实调用待验收 |
+| 多模态模型 ID | Qwen/Qwen3.5-27B，enable_thinking=false；已验证真实单步视觉调用；原Qwen/Qwen2.5-VL-32B-Instruct返回403 Model disabled |
 | Workflow DSL 版本 | 参考0.7.0；固定观察17节点已通过真实Dify检索／HTTP／持久化闭环，视觉19节点仍待实拍验收 |
 | 临时证据服务入口 | 用户配置的Cloudflare Quick Tunnel；实际地址和进程记录见data/quick_tunnel/runtime.json，Dify端HTTPS健康检查已通过 |
 | Dify节点契约参考 | tag 1.17.1 的 graphon==0.7.0；只下载wheel阅读源码，未将其安装到证据服务依赖中 |
+| 视觉模型参数参考 | 官方siliconflow插件qwen3.5-27b.yaml，Git blob c5aa85ed1271fef6473bb3e002467d7d237dfcb5；声明vision和enable_thinking，已与云端UI及单步调用核对 |
 | 业务知识快照 | pilot_20260918_01，GB/T 8196-2018 的10条人工批准记录，已激活 |
 | Dify dataset ID | 实际值保存在本地 .env 和 data/manifests/sync_*.json |
 | Dify document ID | 实际值保存在本地同步清单；1个文档、10个分块，重复同步保持不变 |
@@ -33,3 +34,5 @@
 接口核查依据：[MinerU 输出契约](https://opendatalab.github.io/MinerU/reference/output_files/)、[MinerU Quick Start](https://opendatalab.github.io/MinerU/quick_start/)、[Dify 创建文档](https://docs.dify.ai/en/api-reference/documents/create-document-by-text)、[Dify 分块分页](https://docs.dify.ai/en/api-reference/chunks/list-chunks)。文档核查不能替代真实实例验证。
 
 本轮可复验依据为应用 Git 提交、uv.lock、原 PDF 与批准条款哈希、不可变业务快照、实际索引映射以及 fixtures/dify_cloud/provenance.json。云平台更新不受本项目锁文件控制；切换自建部署时需补齐实例 tag/commit、镜像 digest 和模型插件版本，并重新跑真实契约验收。
+
+模型调整依据：[SiliconFlow服务调整公告](https://docs.siliconflow.cn/docs/release-notes/overview)列出旧视觉模型下线；[官方插件模型声明](https://github.com/langgenius/dify-official-plugins/blob/main/models/siliconflow/models/llm/qwen3.5-27b.yaml)与[Qwen模型卡](https://huggingface.co/Qwen/Qwen3.5-27B)说明新模型的视觉和参数契约。可用性以本项目本轮真实调用为准，不由界面列出模型推断。

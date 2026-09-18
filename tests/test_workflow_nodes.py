@@ -38,6 +38,17 @@ def built_request(workflow_data):
     return source, arguments, initial, result
 
 
+def test_native_uploaded_file_contract(workflow_data):
+    # 真实Dify上传返回的File元数据；只脱敏上传标识及签名URL。
+    _, _, arguments = workflow_data
+    fixture = json.loads((ROOT / "fixtures/dify_file_metadata.real.json").read_text(encoding="utf-8"))
+    arguments["images"] = fixture["files"]
+    result = nodes.validate_input(**arguments)
+    manifest = json.loads(result["image_manifest_json"])
+    assert manifest == [{"image_id": "image_001", "position": 1, "file_ref": "real-upload-redacted-001"}]
+    assert json.loads(result["request_json"])["image_manifest"] == manifest
+
+
 def test_workflow_nodes_to_authoritative_report(client, workflow_data):
     source, arguments, initial, built = built_request(workflow_data)
     VisionResult.model_validate(source["vision"])

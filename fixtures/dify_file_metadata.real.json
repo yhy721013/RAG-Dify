@@ -1,0 +1,21 @@
+{
+  "provenance": {
+    "source": "Dify Cloud LLM single-node input #files#",
+    "captured_at": "2026-09-18",
+    "original_file": "HwacheonCentreLathe_460x1000.jpg",
+    "source_url": "https://commons.wikimedia.org/wiki/File:HwacheonCentreLathe_460x1000.jpg",
+    "author": "Glenn McKechnie",
+    "license": "CC BY-SA 3.0",
+    "redaction": "related_id替换为占位标识；仅保留工作流校验所需实际字段，不保存签名URL或租户标识。",
+    "scope": "真实Dify上传元数据，非模型输出质量证明"
+  },
+  "files": [{
+    "type": "image",
+    "transfer_method": "local_file",
+    "related_id": "real-upload-redacted-001",
+    "mime_type": "image/jpeg",
+    "size": 237887,
+    "filename": "hwacheon-overview.jpg",
+    "extension": ".jpg"
+  }]
+}

@@ -88,7 +88,11 @@ def build_candidate(settings, checklist, model_provider, model_name, evidence_ur
             "retry_config": {"retry_enabled": False, "max_retries": 0, "retry_interval": 1000}})
 
     def llm(node_id, title, prompt_file, schema, user_prompt):
-        add(node_id, "llm", title, {"model": {"provider": model_provider, "name": model_name, "mode": "chat", "completion_params": {"temperature": 0.1}},
+        params = {"temperature": 0.1}
+        if model_provider == "langgenius/siliconflow/siliconflow" and model_name == "Qwen/Qwen3.5-27B":
+            # 该插件模型声明只暴露思考等参数；固定为已通过双图实测的非思考模式。
+            params = {"enable_thinking": False}
+        add(node_id, "llm", title, {"model": {"provider": model_provider, "name": model_name, "mode": "chat", "completion_params": params},
             "prompt_template": [{"role": "system", "text": (ROOT / prompt_file).read_text(encoding="utf-8")},
                                 {"role": "user", "text": user_prompt}],
             "context": {"enabled": False, "variable_selector": []},
@@ -208,7 +212,7 @@ def main():
     parser.add_argument("--mode", choices=["fixed", "vision"], default="vision")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model-provider", default="langgenius/siliconflow/siliconflow")
-    parser.add_argument("--model", default="Qwen/Qwen2.5-VL-32B-Instruct")
+    parser.add_argument("--model", default="Qwen/Qwen3.5-27B")
     parser.add_argument("--evidence-url", default="http://evidence-api:8000")
     args = parser.parse_args()
     if args.output.name == "safety-assessment.yml":

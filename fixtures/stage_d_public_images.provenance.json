@@ -1,0 +1,60 @@
+{
+  "purpose": "阶段D公开照片模型与工作流实测；不代表用户现场设备或安全鉴定",
+  "resources": [
+    {
+      "id": "hwacheon_overview",
+      "title": "HwacheonCentreLathe 460x1000.jpg",
+      "page_url": "https://commons.wikimedia.org/wiki/File:HwacheonCentreLathe_460x1000.jpg",
+      "filename": "hwacheon-overview.jpg",
+      "author": "Glenn McKechnie",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "role": "positive",
+      "equipment_group": "hwacheon_200606",
+      "description": "作者拍摄的Hwacheon普通车床整机照片；原页面说明带数显、卡盘防护罩和刀架。",
+      "local_path": "data/stage_d_web/images/hwacheon-overview.jpg",
+      "sha256": "06f19f8d9649184a3e049a6e35144e65cb536fcdb55e1e4516bf0e19c3373ad4",
+      "bytes": 237887,
+      "width": 1816,
+      "height": 1401,
+      "local_modifications": "none"
+    },
+    {
+      "id": "hwacheon_headstock",
+      "title": "HwacheonCentreLathe-headstock-mask legend.jpg",
+      "page_url": "https://commons.wikimedia.org/wiki/File:HwacheonCentreLathe-headstock-mask_legend.jpg",
+      "filename": "hwacheon-headstock-annotated.jpg",
+      "author": "Glenn McKechnie",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "role": "positive",
+      "equipment_group": "hwacheon_200606",
+      "description": "同一作者的主轴箱部件近照；源文件含编号和局部去色处理，不能把去色、遮罩或不同装夹状态当成防护缺失。",
+      "same_equipment_source": "https://commons.wikimedia.org/wiki/File_talk:HwacheonCentreLathe-headstock-mask_legend.jpg",
+      "local_path": "data/stage_d_web/images/hwacheon-headstock-annotated.jpg",
+      "sha256": "45cff48ee484a2ecf885a00bfadd5311ab3b73203a35fac9959edecd67997b2e",
+      "bytes": 221665,
+      "width": 1644,
+      "height": 1443,
+      "local_modifications": "none"
+    },
+    {
+      "id": "different_lathe",
+      "title": "Conventional-lathe.jpg",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Conventional-lathe.jpg",
+      "filename": "different-conventional-lathe.jpg",
+      "author": "Greudin",
+      "license": "Public domain, released by author",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Conventional-lathe.jpg#Licensing",
+      "role": "negative_different_equipment",
+      "equipment_group": "greudin_lathe_2003",
+      "description": "另一位作者拍摄的另一台普通车床，仅作为混入不同设备的范围拒绝用例。",
+      "local_path": "data/stage_d_web/images/different-conventional-lathe.jpg",
+      "sha256": "80bae9f9c615cff5175cb27776e7ec6c13a949821f7c34dcac3b7caaf26e8173",
+      "bytes": 124046,
+      "width": 761,
+      "height": 591,
+      "local_modifications": "none"
+    }
+  ]
+}

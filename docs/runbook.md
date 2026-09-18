@@ -111,7 +111,7 @@ workflows/workflow-spec.md 是节点、变量和部署绑定的主规格。生�
 
 ```powershell
 .\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode fixed --output data/workflows/fixed-observation.candidate.yml
-.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen2.5-VL-32B-Instruct --evidence-url https://实际受控服务地址
+.\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen3.5-27B --evidence-url https://实际受控服务地址
 ```
 
 生成器不包含密钥。当前固定观察候选已在Dify Cloud通过真实检索／HTTP／报告保存闭环；完整视觉候选已恢复到未发布工作台，尚未完成实拍验收。
@@ -121,3 +121,7 @@ EVIDENCE_API_BASE_URL 必须指向管理员控制、Dify Cloud可达的证据服
 本轮已使用用户提供的Quick Tunnel地址，并经明确授权保存EVIDENCE_API_TOKEN到当前工作流Secret。临时配置载荷已删除。普通无密钥候选重新导入后，务必核对Secret是否保留；星号不代表一定有有效值。
 Quick Tunnel的当前地址在data/quick_tunnel/runtime.json；进程需持续运行。重新启动后按data/quick_tunnel/README.md操作，并更新Dify EVIDENCE_API_BASE_URL。不能直接重启启动脚本覆盖已经运行的服务。
 完成固定观察HTTP闭环、真实视觉与评估模型、多图片关联及服务端报告核对后，才导出正式 workflows/safety-assessment.yml。阶段D未验收前不将工作流发布供业务使用。
+
+公开图片测试资料在 data/stage_d_web/：resources.json记录来源、许可证、尺寸与哈希；input.single.json、input.multi.json、input.mixed-negative.json为表单文本，images路径用于本地选文件，不直接传入API。mixed-negative的预期分类只记录在测试证据中，不能写入模型输入作为答案提示。checklist.proposed.json为六项测试覆盖草案，仍须用户确认后填写真实确认记录并同步到Dify。
+本次图片由浏览器从Wikimedia Commons已加载的原始尺寸资源下载；命令行请求返回403时已停止该下载路径。Windows文件选择器使用绝对正斜杠路径，例如 D:/RAG-Dify/data/stage_d_web/images/hwacheon-overview.jpg；每张JPEG均低于5 MiB。
+Qwen/Qwen2.5-VL-32B-Instruct已实测不可用；当前生成器对Qwen/Qwen3.5-27B使用官方插件声明的enable_thinking=false。单步执行超时后需查看浏览器错误日志及运行时间，避免误读上次缓存。单步观察输出不能代替/reports/finalize的完整工作流结果。
