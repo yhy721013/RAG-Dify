@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -170,12 +171,18 @@ def main():
     store.initialize()
     with worker_lock(config.data_root / "worker.lock"):
         store.recover()
+        stop_heartbeat = threading.Event()
+        def heartbeat():
+            while not stop_heartbeat.wait(5):
+                store.heartbeat()
+        threading.Thread(target=heartbeat, daemon=True).start()
         while True:
             store.heartbeat()
             job = store.claim()
             if job:
                 execute(job, store, config)
             if args.once:
+                stop_heartbeat.set()
                 break
             if not job:
                 time.sleep(2)

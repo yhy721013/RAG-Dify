@@ -15,9 +15,9 @@ from app.schemas import FinalizeRequest, PrepareRequest
 from app.settings import Settings, configured
 
 
-def create_app(settings: Settings | None = None):
+def create_app(settings: Settings | None = None, repository: Repository | None = None):
     config = settings or Settings.from_env()
-    repo = Repository(config.db_path)
+    repo = repository or Repository(config.db_path)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -56,7 +56,12 @@ def create_app(settings: Settings | None = None):
         try:
             with repo.connect() as conn:
                 database = conn.execute("PRAGMA user_version").fetchone()[0] == 1
-            snapshot = repo.snapshot_active(config.active_snapshot_id)
+            if config.published_snapshots:
+                with repo.connect() as conn:
+                    snapshots = [row[0] for row in conn.execute("SELECT DISTINCT snapshot_id FROM standard_versions")]
+                snapshot = any(repo.snapshot_active(uid) for uid in snapshots)
+            else:
+                snapshot = repo.snapshot_active(config.active_snapshot_id)
         except sqlite3.Error:
             snapshot = False
         ready = database and snapshot and configured(config.api_token) and configured(config.dataset_id)

@@ -22,6 +22,19 @@ def identify(record):
     record.update(standard_uid=sid, clause_uid=clause_identity(sid, record["edition"], record["clause_path"]))
 
 
+def invalidate_dependents(payload, changed_uid):
+    affected = {changed_uid}
+    while True:
+        found = {item["record"]["clause_uid"] for item in payload["candidates"]
+                 if set(item["record"]["context_clause_uids"]) & affected}
+        if found <= affected:
+            break
+        affected |= found
+    for item in payload["candidates"]:
+        if item["record"]["clause_uid"] in affected:
+            pending(item["record"])
+
+
 def item_for(payload, candidate_id):
     for item in payload.get("candidates", []):
         if item["id"] == candidate_id:
@@ -71,6 +84,7 @@ def update_metadata(payload, metadata):
 def edit_candidate(payload, candidate_id, changes, block_ids, root):
     result = deepcopy(payload)
     record = item_for(result, candidate_id)["record"]
+    previous_uid = record["clause_uid"]
     if set(changes) - set(EDITABLE):
         raise DomainError("invalid_edit", "禁止通过编辑接口改变批准状态或原始来源")
     record.update(changes)
@@ -80,6 +94,7 @@ def edit_candidate(payload, candidate_id, changes, block_ids, root):
     set_sources(result, record, block_ids, root)
     pending(record)
     identify(record)
+    invalidate_dependents(result, previous_uid)
     ClauseRecord.model_validate(record)
     return result
 
@@ -95,7 +110,7 @@ def approve(payload, candidate_id, actor, acknowledgements, root):
     blocks = blocks_for(result)
     selected = [bid for span in record["source_spans"] for bid in span["block_ids"]]
     structural = [issue for bid in selected for issue in blocks[bid][1]["review_issues"]
-                  if issue.startswith(("missing_asset:", "unsafe_asset:", "unsupported_block_type:"))]
+                  if issue == "visual_asset_unconfirmed" or issue.startswith(("missing_asset:", "unsafe_asset:", "unsupported_block_type:"))]
     if structural:
         raise DomainError("incomplete_evidence", "来源资产或解析结构不完整：" + "、".join(structural))
     if any(not record.get(key, "").strip() for key in METADATA) or record["standard_status"] == "unknown":
@@ -118,6 +133,7 @@ def approve(payload, candidate_id, actor, acknowledgements, root):
 def split_candidate(payload, candidate_id, offset):
     result = deepcopy(payload)
     item = item_for(result, candidate_id)
+    invalidate_dependents(result, item["record"]["clause_uid"])
     text = item["record"]["text_verbatim"]
     if not 0 < offset < len(text) or not text[:offset].strip() or not text[offset:].strip():
         raise DomainError("invalid_edit", "拆分位置须在正文中间")
@@ -136,6 +152,8 @@ def merge_candidates(payload, candidate_ids, root):
         raise DomainError("invalid_edit", "请至少选择两个不同候选")
     result = deepcopy(payload)
     items = [item_for(result, uid) for uid in candidate_ids]
+    for item in items:
+        invalidate_dependents(result, item["record"]["clause_uid"])
     first = items[0]["record"]
     first["text_verbatim"] = "\n".join(item["record"]["text_verbatim"] for item in items)
     bids = list(dict.fromkeys(bid for item in items for span in item["record"]["source_spans"] for bid in span["block_ids"]))

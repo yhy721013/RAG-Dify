@@ -184,6 +184,52 @@ class DifyClient:
     def documents(self):
         return self.paginated("/documents")
 
+    def snapshot_metadata(self):
+        fields = self.request("GET", self.path("/metadata")).get("doc_metadata")
+        if not isinstance(fields, list):
+            raise contract_error("doc_metadata")
+        matches = [row for row in fields if row.get("name") == "rag_snapshot_id"]
+        if not matches:
+            # 字段名在 Dify 中唯一；若响应丢失，恢复时先 GET 对账。
+            field = self.request("POST", self.path("/metadata"), json={"name": "rag_snapshot_id", "type": "string"})
+        elif len(matches) == 1:
+            field = matches[0]
+        else:
+            raise contract_error("doc_metadata.name")
+        if field.get("type") != "string" or not field.get("id") or field.get("name") != "rag_snapshot_id":
+            raise DomainError("metadata_error", "rag_snapshot_id 必须是唯一字符串元数据字段")
+        return {key: field[key] for key in ("id", "name", "type")}
+
+    def document_snapshot(self, document_id, field):
+        detail = self.request("GET", self.path("/documents/" + quote(document_id, safe="")), params={"metadata": "only"})
+        if detail.get("id") != document_id or "doc_metadata" not in detail:
+            raise contract_error("document.doc_metadata")
+        # Dify Cloud 实测：尚未设置任何元数据的新文档返回 null。
+        if detail["doc_metadata"] is None:
+            return None
+        if not isinstance(detail["doc_metadata"], list):
+            raise contract_error("document.doc_metadata")
+        matches = [row for row in detail["doc_metadata"] if row.get("name") == field["name"]]
+        if not matches:
+            return None
+        if len(matches) != 1 or matches[0].get("id") != field["id"] or not isinstance(matches[0].get("value"), str):
+            raise contract_error("document.doc_metadata.value")
+        return matches[0]["value"]
+
+    def bind_document_snapshot(self, document_id, snapshot_id, field, allow_initial=False):
+        actual = self.document_snapshot(document_id, field)
+        if actual is None and allow_initial:
+            self.request("POST", self.path("/documents/metadata"), json={"operation_data": [{
+                "document_id": document_id, "metadata_list": [{"id": field["id"], "name": field["name"], "value": snapshot_id}],
+                "partial_update": True}]})
+            actual = self.document_snapshot(document_id, field)
+        if actual != snapshot_id:
+            raise DomainError("metadata_error", "文档知识版本元数据缺失或漂移，禁止发布", status=409)
+
+    @staticmethod
+    def snapshot_filter(snapshot_id):
+        return {"logical_operator": "and", "conditions": [{"name": "rag_snapshot_id", "comparison_operator": "is", "value": snapshot_id}]}
+
     def segments(self, document_id, page_size=100):
         return self.paginated("/documents/" + quote(document_id, safe="") + "/segments", page_size)
 

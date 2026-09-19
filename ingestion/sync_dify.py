@@ -120,7 +120,7 @@ def sync_snapshot(snapshot_id, repo, settings, client):
         with repo.connect() as conn:
             collision = conn.execute("SELECT 1 FROM dify_segments WHERE dataset_id=? AND snapshot_id<>? LIMIT 1",
                                      (settings.dataset_id, snapshot_id)).fetchone()
-        if collision:
+        if collision and not settings.partitioned_dataset:
             raise DomainError("dataset_snapshot_conflict", "每个候选快照必须使用独立知识库", status=409)
         dataset = client.dataset()
         origin = {"base_url": settings.dify_base_url.rstrip("/"), "dataset_id": settings.dataset_id,
@@ -128,6 +128,11 @@ def sync_snapshot(snapshot_id, repo, settings, client):
         state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"origin": origin, "documents": {}}
         if state["origin"] != origin:
             raise DomainError("sync_conflict", "同步清单的来源或快照内容已变化", status=409)
+        field = client.snapshot_metadata() if settings.partitioned_dataset else None
+        if state.get("metadata_field") and state["metadata_field"] != field:
+            raise DomainError("metadata_error", "已登记的知识版本字段已变化", status=409)
+        if field:
+            state["metadata_field"] = field
         groups = defaultdict(list)
         for clause in clauses:
             groups[clause["standard_uid"]].append(clause)
@@ -161,6 +166,9 @@ def sync_snapshot(snapshot_id, repo, settings, client):
                 state["documents"][standard_uid] = document
                 atomic_json(path, state)
             client.wait_index(document["document_id"], document.get("batch"))
+            if field:
+                client.bind_document_snapshot(document["document_id"], snapshot_id, field,
+                                              allow_initial=document["status"] != "verified")
             mappings = verify_segments(client.segments(document["document_id"]), chunks, snapshot_id,
                                        settings.dataset_id, document["document_id"])
             all_mappings.extend(mappings)
@@ -169,6 +177,8 @@ def sync_snapshot(snapshot_id, repo, settings, client):
         # 禁止无关文档污染当前快照专用知识库。
         actual_docs = {item["id"] for item in client.documents()}
         expected_docs = {item["document_id"] for item in state["documents"].values()}
+        if field:
+            expected_docs |= verify_historical_partitions(snapshot_id, repo, settings, client, field)
         if actual_docs != expected_docs:
             raise DomainError("mapping_error", "知识库包含未纳入快照的文档或缺少预期文档", status=409)
         with repo.connect(write=True) as conn:
@@ -181,9 +191,30 @@ def sync_snapshot(snapshot_id, repo, settings, client):
                 conn.executemany("INSERT INTO dify_segments VALUES (:snapshot_id, :dataset_id, :document_id, :segment_id, :chunk_uid, :clause_uid, :index_text_sha256)", expected)
         state.update(status="verified", verified_at=now(), mapping_sha256=mapping_digest(repo, snapshot_id, settings.dataset_id),
                      retrieval_model=client.retrieval_model(dataset))
+        if field:
+            state["retrieval_model"]["metadata_filtering_conditions"] = client.snapshot_filter(snapshot_id)
         atomic_json(path, state)
         return {"snapshot_id": snapshot_id, "status": "verified", "documents": len(groups), "chunks": len(all_mappings),
                 "provenance": client.provenance}
+
+
+def verify_historical_partitions(snapshot_id, repo, settings, client, field):
+    """只接纳在本地登记且逐块可验证的历史分区；不忽略外来文档。"""
+    with repo.connect() as conn:
+        rows = [dict(row) for row in conn.execute("SELECT * FROM dify_segments WHERE dataset_id=? AND snapshot_id<>? ORDER BY snapshot_id,document_id,chunk_uid",
+                (settings.dataset_id, snapshot_id))]
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(row["snapshot_id"], row["document_id"])].append(row)
+    for (historical_id, document_id), mappings in groups.items():
+        client.bind_document_snapshot(document_id, historical_id, field)
+        clauses = [repo.clause(historical_id, uid) for uid in sorted({row["clause_uid"] for row in mappings})]
+        if any(row is None for row in clauses):
+            raise DomainError("mapping_error", "历史分区缺少已登记条款")
+        actual = verify_segments(client.segments(document_id), chunks_for(clauses), historical_id, settings.dataset_id, document_id)
+        if sorted(actual, key=lambda row: row["chunk_uid"]) != sorted(mappings, key=lambda row: row["chunk_uid"]):
+            raise DomainError("mapping_error", "历史分区的条款映射发生漂移", status=409)
+    return {document_id for _, document_id in groups}
 
 
 def activate_snapshot(snapshot_id, repo, settings, client):
@@ -194,6 +225,8 @@ def activate_snapshot(snapshot_id, repo, settings, client):
     evaluation = json.loads(path.read_text(encoding="utf-8"))
     if not evaluation.get("passed") or (settings.app_env != "test" and evaluation.get("provenance") != "live_service_api"):
         raise DomainError("activation_blocked", "真实检索评测未通过；模拟结果不得用于业务发布", status=409)
+    if settings.partitioned_dataset and evaluation.get("snapshot_filter") != client.snapshot_filter(snapshot_id):
+        raise DomainError("activation_blocked", "缺少本知识版本的过滤检索验收记录", status=409)
     sync_snapshot(snapshot_id, repo, settings, client)  # 发布前重新回读真实分块。
     if (evaluation.get("snapshot_sha256") != digest(repo.all_clauses(snapshot_id)) or
         evaluation.get("mapping_sha256") != mapping_digest(repo, snapshot_id, settings.dataset_id) or

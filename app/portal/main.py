@@ -1,6 +1,7 @@
 import json
 import secrets
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -52,6 +53,7 @@ def create_app(config=None):
     store = PortalRepository(settings.db_path)
     evidence = Repository(settings.evidence_settings().db_path)
     csrf = secrets.token_urlsafe(32)
+    render_lock = threading.Lock()
     templates = Environment(loader=FileSystemLoader(ROOT / "templates"), autoescape=select_autoescape())
 
     @asynccontextmanager
@@ -140,12 +142,35 @@ def create_app(config=None):
 
     @app.get("/api/documents/{document_id}")
     def document(document_id: str):
-        return store.document(document_id)
+        doc = store.document(document_id)
+        refs = {ref for page in doc["payload"].get("normalized", {}).get("pages", []) for block in page["blocks"] for ref in block["asset_refs"]}
+        return {**doc, "asset_links": {ref: f"/api/documents/{document_id}/assets/{digest(ref)}" for ref in refs}}
 
     @app.get("/api/documents/{document_id}/pdf")
     def pdf(document_id: str):
         doc = store.document(document_id)
         return FileResponse(local_path(settings.data_root, doc["source_path"]), media_type="application/pdf")
+
+    @app.get("/api/documents/{document_id}/pages/{page_number}")
+    def pdf_page(document_id: str, page_number: int):
+        import pypdfium2 as pdfium
+        doc = store.document(document_id)
+        if not 1 <= page_number <= doc["page_count"]:
+            raise DomainError("not_found", "PDF 页码越界", status=404)
+        target = settings.data_root / "previews" / doc["sha256"] / f"{page_number}.png"
+        # PDFium 非线程安全；单进程内串行渲染并缓存原页图像。
+        with render_lock:
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with pdfium.PdfDocument(local_path(settings.data_root, doc["source_path"])) as pdf:
+                    page = pdf[page_number - 1]
+                    width, height = page.get_size()
+                    scale = min(2, 1800 / max(width, height))
+                    bitmap = page.render(scale=scale)
+                    bitmap.to_pil().save(target)
+                    bitmap.close()
+                    page.close()
+        return FileResponse(target, media_type="image/png")
 
     @app.get("/api/documents/{document_id}/assets/{asset_id}")
     def asset(document_id: str, asset_id: str):

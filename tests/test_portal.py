@@ -44,6 +44,9 @@ def test_upload_duplicate_reuses_task_and_survives_restart(portal):
     assert len(fresh.jobs()) == 1
     assert fresh.document(first.json()["document_id"])["page_count"] == 2
     assert client.get("/api/jobs").json()[0].get("payload") is None
+    preview = client.get(f'/api/documents/{first.json()["document_id"]}/pages/1')
+    assert preview.status_code == 200 and preview.content.startswith(b"\x89PNG")
+    assert client.get(f'/api/documents/{first.json()["document_id"]}/pages/99').status_code == 404
 
 
 @pytest.mark.parametrize("name,content,code", [

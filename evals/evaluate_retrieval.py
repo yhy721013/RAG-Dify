@@ -47,6 +47,8 @@ def evaluate(cases_path: Path, repo, settings, client, interval_seconds=0):
     uids = {item["clause_uid"] for item in clauses}
     if manifest.get("status") != "verified" or manifest["origin"]["snapshot_sha256"] != digest(clauses):
         raise DomainError("snapshot_not_synced", "快照同步清单未通过或与当前内容不一致")
+    if settings.partitioned_dataset and manifest["retrieval_model"].get("metadata_filtering_conditions") != client.snapshot_filter(snapshot_id):
+        raise DomainError("metadata_error", "检索自检必须使用当前知识版本的固定过滤条件")
     mapping_hash = mapping_digest(repo, snapshot_id, settings.dataset_id)
     if manifest.get("mapping_sha256") != mapping_hash:
         raise DomainError("mapping_error", "映射与同步清单不一致")
@@ -83,5 +85,7 @@ def evaluate(cases_path: Path, repo, settings, client, interval_seconds=0):
               "no_answer_candidate_rate": (sum(item["no_answer_has_candidates"] for item in unanswerable) / len(unanswerable)) if unanswerable_complete else None,
               "passed": bool(answerable) and errors == 0 and rate >= 0.9, "cases": rows,
               "limitation": "Top-5 命中率是检索排错指标；无答案的候选召回不等同报告误引，适用性和业务判断仍需人工复核。"}
+    if settings.partitioned_dataset:
+        result["snapshot_filter"] = client.snapshot_filter(snapshot_id)
     atomic_json(evaluation_path(settings, snapshot_id), result)
     return result

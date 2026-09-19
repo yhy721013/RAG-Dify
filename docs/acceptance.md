@@ -266,3 +266,13 @@
 - 新增 app/portal、HTML/原生 JavaScript 页面、独立任务数据库、上传去重与人工复核接口。旧试点配置不自动带入新实例。引入 python-multipart 与 Pillow，用于上传及实际图片格式校验，锁定于 uv.lock。
 - 工作区 .venv 执行 python -X utf8 -m pytest -q：118 passed，2 条原有第三方弃用警告；新增 8 项覆盖无效/加密/页数超限 PDF、上传去重、刷新后持久化、CSRF、版本指针和运行歧义。node --check app/static/portal.js 通过，git diff --check 通过。
 - 当前为页面与任务基础提交，解析/发布 worker 和界面已接线，Dify 版本隔离及 Workflow 客户端尚待下一提交完成；未将模拟测试记为真实闭环通过。未新增人工批准条款，未改动线上 Dify 或旧数据库。
+
+## 本地测试台 — 完整解析、人工复核和知识版本隔离（2026-09-20）
+
+- 浏览器实际上传 test_files/0 中 GB/T 8196-2018（34页），后台使用独立 .venv-mineru、MinerU 4.0.2、all/zip/standard/auto 完整解析，得到117候选，34页覆盖完整；上传、归档、任务持久化与候选页面均实际运行。来源 SHA-256 与旧试点一致。无候选被机器自动批准。
+- 浏览器原内嵌 PDF 未显示，增加 pypdfium2 原页渲染缓存；已在同页实际核对封面显示与页面切换。前端仍为 HTML/原生 JavaScript，无 Node 构建。原文件未修改。
+- 用户明确确认新测试台沿用10条既有批准原文、依赖与检索标签。新解析8条文字逐字相同，2条恢复为原批准原文；所有来源页码一致。复核比较保存在 data/portal/acceptance/ten-clause-review.*。已通过页面登记首版4条人工批准，其余候选尚未发布。
+- 专用知识库 mechanical-safety-local-portal 已创建；经用户授权创建仅限该库的密钥并保存在 .env.portal。使用官方 Service API 实际配置 High Quality、Hybrid Search、Qwen/Qwen3-Embedding-4B 和 rag_snapshot_id 字符串字段。未修改旧试点知识库。
+- 单知识库多版本逻辑只在门户显式启用：同步为每版赋予并回读元数据，登记历史分区逐块核对，外来文档阻止发布；检索自检的 metadata_filtering_conditions 嵌套在 retrieval_model 内。证据服务仅接受已登记发布且 active 的版本，旧单快照模式保持原行为。
+- 首个4条版本在真实元数据回读时被阻止：Cloud 对未设置元数据的文档返回 doc_metadata=null；保存脱敏真实 fixture，适配为“尚未绑定”，仍不算验证通过。修复后恢复同一任务和同一文档，当前正运行真实检索门禁；此处未提前宣称发布成功。
+- 工作区 .venv 全量测试：137 passed，2条既有弃用警告；随后真实 null 元数据新增回归及分区测试2项通过。覆盖缺页、缺失/未确认图表、未知边界、拆分合并、编辑与依赖批准失效、跨版本命中拒绝、外来文档、未发布版本和持久化任务边界。界面轮询优化为数据变化时才重建列表，避免打断选择。

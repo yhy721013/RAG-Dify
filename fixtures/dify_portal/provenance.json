@@ -1,0 +1,8 @@
+{
+  "source": "Dify Cloud official Service API",
+  "captured_at": "2026-09-19T18:01:00Z",
+  "endpoint": "GET /v1/datasets/{dataset_id}/documents/{document_id}?metadata=only",
+  "fixture": "document_without_metadata.real.json",
+  "redactions": ["document id replaced; no credentials or standard text retained"],
+  "observation": "An indexed document with no assigned metadata returns doc_metadata=null. This is not evidence that snapshot metadata has been verified."
+}
