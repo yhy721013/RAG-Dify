@@ -296,3 +296,9 @@
 本地真实证据位于data/portal/acceptance/：ten-clause-review.*、v1-report-baseline.json、workflow-runs.real.json、reports-verification.real.json、version-isolation.real.json、repeated-sync.real.json、restart-and-recovery.real.json。解析包、数据库、报告、测试照片、密钥和实际绑定DSL均不进入源码包。
 
 剩余边界：Quick Tunnel依赖本机进程、地址可变化；公开历史照片仍有模型误识别；报告均pending_review。仅一份标准十条语料和普通卧式金属车床六项检查，不扩展为阶段E专业业务验收。新开发者仍需自己的Dify/模型凭据及HTTPS入口；没有承诺全新Windows机器或其他硬件上的MinerU安装/推理必然成功。未知远程运行ID及残留同步锁需人工对账，不自动重复创建；多用户部署、更多设备和自动清理历史索引留待后续。
+
+### 源码包独立目录复验
+
+- 提交35cf1a0从干净Git HEAD导出112个源码文件，确认包内无.env/.env.portal、data、test_files或虚拟环境。解压到tmp/portal-delivery-35cf1a0，工作目录切换到解压源码后，仍使用本工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：**144 passed in 4.62s**，2条既有弃用警告。该复验验证无业务数据/本机配置的源码可测试，不等同全新机器安装或真实Dify开箱免配置。
+- 导出前扫描112个当前源码文件：本机实际服务凭据精确匹配0处；已检查的196个历史blob匹配0处。检查范围为当前已知凭据，未声称通用扫描能够证明不存在任何未知秘密。Git没有配置远程仓库，没有创建、推送或公开源码。
+- 本条记录为源码交付复验补记；最终源码包由包含本记录的Git HEAD重新导出，应用代码与已复验源码保持相同。
