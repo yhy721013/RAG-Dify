@@ -158,14 +158,34 @@ def test_http_failure_never_emits_model_report():
 
 
 @pytest.mark.parametrize("field", ["risk_description", "applicability_reason", "recommendation", "verification_required"])
-def test_evidence_ids_cannot_bypass_structured_citations(field):
+@pytest.mark.parametrize("selected", [False, True])
+def test_inline_evidence_ids_require_structured_citations(field, selected):
     evidence_id = "ev_" + "a" * 32
     context = {"context_id": "ctx_test", "checks": [{"check_id": "guard_joints", "allowed_evidence_ids": [evidence_id]}]}
     finding = {"check_id": "guard_joints", "observation_ids": ["obs_001"], "status": "insufficient_evidence",
-        "risk_description": "待确认", "applicability_reason": "待确认", "evidence_ids": [],
+        "risk_description": "待确认", "applicability_reason": "待确认", "evidence_ids": [evidence_id] if selected else [],
         "recommendation": "待确认", "verification_required": ["现场核查"]}
     finding[field] = ["依据" + evidence_id] if field == "verification_required" else "依据" + evidence_id
-    with pytest.raises(ValueError, match="evidence_ids"):
+    if selected:
+        original = deepcopy(finding)
+        payload = json.loads(nodes.finalize_payload(json.dumps(context), {"findings": [finding]})["body"])
+        assert payload == {"context_id": "ctx_test", "findings": [original]}
+        assert finding == original
+    else:
+        with pytest.raises(ValueError, match="evidence_ids"):
+            nodes.finalize_payload(json.dumps(context), {"findings": [finding]})
+
+
+@pytest.mark.parametrize("problem", ["allowed_but_unselected", "unknown_in_prose", "unknown_selected"])
+def test_inline_citation_compatibility_keeps_reference_boundaries(problem):
+    selected_id, other_id = "ev_" + "a" * 32, "ev_" + "b" * 32
+    allowed = [selected_id, other_id] if problem == "allowed_but_unselected" else [selected_id]
+    context = {"context_id": "ctx_test", "checks": [{"check_id": "guard_joints", "allowed_evidence_ids": allowed}]}
+    finding = {"check_id": "guard_joints", "observation_ids": ["obs_001"], "status": "needs_confirmation",
+        "risk_description": "依据" + other_id, "applicability_reason": "待确认",
+        "evidence_ids": [other_id] if problem == "unknown_selected" else [selected_id],
+        "recommendation": "待确认", "verification_required": ["现场核查"]}
+    with pytest.raises(ValueError):
         nodes.finalize_payload(json.dumps(context), {"findings": [finding]})
 
 

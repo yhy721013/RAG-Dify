@@ -5,9 +5,9 @@
 
 ## 阶段 D 结论：技术闭环与正式DSL已交付（2026-09-19）
 
-用户已确认普通卧式金属车床六项清单，仅使用此前批准的10条语料和公开照片。stage-d-v2的单图、同机双图均完成真实模型、原生检索、HTTPS prepare/finalize及报告保存；混设备在检索前被拒绝。两个模型实际收到相同顺序的两张图片。各报告6项检查、18处引用，原文和哈希均与批准快照一致；Dify输出、SQLite和HTTPS查询一致，重复请求不新增记录，匿名查询401。
+用户已确认普通卧式金属车床六项清单，仅使用此前批准的10条语料和公开照片。stage-d-v2曾通过单图、双图及混设备反例，随后复验暴露合法重复引用被误拦的问题；当前stage-d-v3已兼容该格式偏差，并通过同一真实失败输入回放及新一轮单图、同机双图完整流程。两个新报告均为6项检查、18处引用，原文和哈希与批准快照一致；Dify输出、SQLite和HTTPS查询一致，重复请求不新增记录，匿名查询401。
 
-交付：workflows/safety-assessment.yml（19节点、无密钥，来自已导入运行验证的候选），本地103项测试通过。详细运行ID、失败修复、命令和SHA-256见文末；下方早期pending及失败状态保留为历史记录。报告仍为pending_review，工作流未发布，视觉误识别和条款适用性仍需专业复核；阶段E业务评测、并发及重启恢复现场验收尚未开展。
+交付：workflows/safety-assessment.yml（stage-d-v3，19节点、无密钥，代码副本与本轮工作台逐项核对），本地110项测试通过。详细运行ID、失败修复、命令和SHA-256见文末；早期pending、失败及v2成功状态均保留为历史记录。报告仍为pending_review，工作流未发布，视觉误识别和条款适用性仍需专业复核；阶段E业务评测、并发及重启恢复现场验收尚未开展。
 
 ## 阶段 C 结论：用户确认范围内已通过（2026-09-18）
 
@@ -235,3 +235,27 @@
 ```
 
 阶段D技术验收完成。剩余风险：公开图片中的部件、材质和防护状态仍有模型误识别，整改建议及适用性未完成专业业务复核；这两例运行不构成准确率或性能承诺。工作流未发布，Quick Tunnel为临时入口，当前仅一份标准的10条语料；阶段E业务验收、真实现场资料、并发及重启验证、自建容器部署均未因此被宣称完成。
+
+## 阶段 D — 合法重复引用兼容性修复（2026-09-19）
+
+- 按用户要求再次复验，单图于11:48:09开始，在188.993秒后被finalize_body拒绝，未执行HTTP定稿；遵照“遇阻塞先汇报”的要求，当时停止双图测试。运行ID为0d366972-e6cc-4ce4-8ccc-a3837074ccad，已保存证据上下文ctx_c03fdde2f91f4c128953fb33241a6ee3，没有对应报告。
+- 只读核查原始响应：6项finding各有3个合法evidence_ids，观察归属也正确；6个risk_description另重复出现9处同样的证据ID。原始JSON与structured_output一致，线上提示词已包含禁止规则。失败来自“正文出现ID即拒绝”的格式策略，并非引用数组为空、未知引用或鉴权故障。
+- 用户明确要求修复、减少过严校验、完成验收后提交Git。最小修复仅调整finalize_payload：正文中服务证据ID必须是该finding已声明的evidence_ids子集；结构化引用仍先验证属于该检查项允许集合。合法重复可继续，未登记、未知及越权引用仍拒绝；不改写正文、不自动补选或删除证据，四个HTTP接口和服务端校验不变。
+- 新增回归先复现4项失败；修复后节点测试40项通过。暂不包含旧正式DSL一致性检查的回归为109 passed、1 deselected，2条既有第三方弃用警告。正式DSL随完成验收的v3配置同步后再执行全量测试。
+- 通过已有Dify界面原位更新8个共享代码副本，并逐一回读SHA-256与本地候选核对；只修改非敏感WORKFLOW_VERSION为stage-d-v3，未重新导入或在浏览器读取、重填Secret。接口核查正常使用本地既有服务凭据，没有生成凭据导入载荷，鉴权及已配置HTTPS地址保持原状。
+- 12:25:17使用同一真实失败输入单步回放修复后的finalize_body，SUCCESS、0.115秒、0 tokens；输入上下文和模型草稿与失败现场逐字段一致，返回的6项finding及18个引用未改写。该回放不调用模型或HTTP定稿，不作为完整流程验收；记录见data/retests/citation-compatibility-20260919/real-failure-replay.json。
+- v3单图完整运行：2026-09-19 12:30:59开始，SUCCESS，131.370秒、50990 tokens、15个外层执行步骤；运行ID为31ead7da-7001-45a3-bbf0-9850f097dbfa，报告rpt_160f85fc8ad243b59fe6afa83a8d62ea。Markdown SHA-256为070b9e82e464235a40f4745f1546215175ea8f1d7850f7240d32b1484e5a4f65。
+- v3同机双图完整运行：2026-09-19 12:38:01开始，SUCCESS，241.057秒、55410 tokens、15个外层执行步骤；运行ID为508ac013-9e74-4c2b-a1a6-a04fb1c22e98，报告rpt_6037a1b544af4e039073965f47506f2b。Markdown SHA-256为7b83f13e945668ffb036e3df2caaebdbf9ceaa1337310fa70280f14b90393f0b。
+- 两份报告各含6项检查、18处引用；10条引用及依赖条款的原文、哈希、身份和源页位置均与批准快照一致，观察和证据归属通过核对。Dify输出、SQLite和HTTPS查询一致；重放prepare/finalize保持同一context/report且数量不变，匿名查询401。双图报告包含image_001和image_002及对应上传标识。
+- 本次新生成的两份报告正文未出现重复证据ID；兼容性分支的真实验证来自前述同一失败输入原样回放（6处字段、9次重复ID），不能把普通正例冒充触发了兼容分支。
+- 正式DSL同步v3代码、版本及工作台已配置的HTTPS地址，SHA-256为e389dcd26e401323e4d6a85c709163158ac0b12dec18a708258e9f008830e8c5。再次执行`.\.venv\Scripts\python.exe -X utf8 -B -m pytest` → **110 passed in 3.02s**，2条既有第三方弃用警告；包含正式DSL与源码一致性检查。
+- 本轮证据及报告独立保存在data/retests/citation-compatibility-20260919/：real-failure-replay.json、expected-code-hashes.json、report-single.*、report-multi.*及对应verification.json。没有覆盖先前报告，也没有将报告、数据库或凭据提交Git；原失败上下文保留，没有为其补造报告。测试后业务库为7个证据上下文、6个报告。
+
+本轮完整报告核对的实际命令：
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -B data/retests/citation-compatibility-20260919/verify_report.py --case single --report-id rpt_160f85fc8ad243b59fe6afa83a8d62ea --dify-markdown-sha256 070b9e82e464235a40f4745f1546215175ea8f1d7850f7240d32b1484e5a4f65
+.\.venv\Scripts\python.exe -X utf8 -B data/retests/citation-compatibility-20260919/verify_report.py --case multi --report-id rpt_6037a1b544af4e039073965f47506f2b --dify-markdown-sha256 7b83f13e945668ffb036e3df2caaebdbf9ceaa1337310fa70280f14b90393f0b
+```
+
+结论：已修复合法重复引用导致的整单失败，未放宽引用身份、检查项范围、观察归属或证据完整性要求。提示词、模型、检索配置和证据输入内容未改变；不加入自动重试、自动删字或证据补选。模型对事实和适用性的判断仍需专业复核，正文可能含冗余ID或模型复述，不能据本次两个成功样本承诺所有后续运行稳定通过。Quick Tunnel仍为临时入口，工作流未发布，未扩大到阶段E。

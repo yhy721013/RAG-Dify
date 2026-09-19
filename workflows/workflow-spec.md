@@ -1,6 +1,6 @@
 # Workflow 实施规格（阶段 D 技术验收通过）
 
-阶段 D 已获用户明确授权并完成本轮技术验收。固定观察17节点先通过HTTP闭环，完整视觉19节点随后以公开车床单图和同机双图完成真实检索、两个模型调用及服务端报告保存；混设备在检查项整理处终止。正式 `safety-assessment.yml` 与实际导入、完整运行的stage-d-v2配置一致，仅统一行尾并保留空Secret值。工作台保持未发布，报告均为pending_review；阶段E业务评测尚未开展。
+阶段 D 已获用户明确授权并完成本轮技术验收。固定观察17节点先通过HTTP闭环，完整视觉19节点随后完成真实检索、两个模型调用及服务端报告保存；既有混设备反例在检查项整理处终止。本轮stage-d-v3兼容正文中已合法登记的重复证据ID，并再次通过单图、同机双图完整流程及真实失败输入回放。正式 `safety-assessment.yml` 已同步本轮节点代码、版本和当前HTTPS地址，Secret保持空值。工作台保持未发布，报告均为pending_review；阶段E业务评测尚未开展。
 
 工作台草稿名称为“机械设备安全评估（阶段D）”，未发布；应用标识和本地候选哈希保存在 data/workflows/，不作为公共访问凭据。
 
@@ -37,7 +37,7 @@
 | prepare_http | prepare_body.body、管理员URL／Bearer变量 | /evidence/prepare 的 status_code / body |
 | unpack_evidence | prepare_http状态和body、原始请求 | context_id、context_json、evidence_json；身份和检查项不一致即终止 |
 | assessment | 同一份 start.images、观察、检查项和完整证据 | structured_output，遵循 config/assessment-draft.schema.json |
-| finalize_body | unpack_evidence.context_json、assessment.structured_output | 由代码绑定context_id；证据ID仅允许在evidence_ids内，正文出现服务证据ID即拒绝 |
+| finalize_body | unpack_evidence.context_json、assessment.structured_output | 由代码绑定context_id；正文中的服务证据ID必须已列入本项合法evidence_ids，允许重复，不自动补选或改写 |
 | finalize_http | finalize_body.body、管理员URL／Bearer变量 | /reports/finalize 的 status_code / body |
 | unpack_report / end | finalize_http状态和body、可信context_id | 仅输出保存后的report_id、Markdown和validation_json |
 
@@ -46,6 +46,8 @@
 输入必须为1～4张本地上传的JPEG/PNG，每张≤5 MiB；用户未确认同设备、设备类型与清单不一致、图片未知／重复标识均拒绝。模型判定不同设备、无法辨认或范围不明也会终止。未能观察到的固定检查项用“需补图／现场检查”保留，不自动变成不存在或无风险。
 
 阶段 D 向 prepare 契约新增可选追溯字段：equipment_type、equipment_description、operating_state、work_context、same_equipment_confirmed、workflow_version、model_id。原有必填字段和四个接口不变；空可选字段从哈希中排除，兼容旧请求的幂等记录。
+
+提示词仍优先要求证据ID只写在evidence_ids数组，运行时兼容合法重复。具体规则为：先校验evidence_ids属于该检查项允许集合，再检查正文中ev_加32位十六进制ID是evidence_ids的子集。合法重复原样保留；正文未登记、未知、跨检查项的证据仍被拒绝，不从正文推断或补充引用。观察归属、检查项覆盖、证据完整性及服务端原文回填规则保持不变。
 
 ## 候选生成与导入
 
@@ -58,7 +60,7 @@
 fixed 模式仅使用明确标记为软件联通测试的固定观察和固定结果，不能作为真实设备评估；vision 模式才包含真实视觉与评估节点。初始全链路未通过前不要发布应用。
 
 管理员需绑定 EVIDENCE_API_BASE_URL、EVIDENCE_API_TOKEN（Secret）、SNAPSHOT_ID、DATASET_ID、CHECKLIST_JSON、WORKFLOW_VERSION、MODEL_ID。常规候选和最终交付文件中的密钥始终为空；服务密钥不写进用户输入或模型提示词。模型ID环境变量必须与两个LLM节点实际模型一致。
-本轮已取得用户对该服务密钥及当前Dify工作流的明确授权，通过一次性本地配置载荷绑定Secret；临时载荷均已删除，不纳入Git，也未把密钥输出到聊天或写入模型提示词。普通候选生成器仍不写密钥。重新导入无密钥候选或正式DSL时需保留或重新绑定Secret，不能以界面的星号显示判断鉴权是否有效。
+先前联调经用户授权，通过一次性本地配置载荷绑定Secret，临时载荷均已删除。本次v3使用界面原位更新代码并保留该配置，没有在浏览器读取或重填Secret，也未生成凭据导入载荷。普通候选生成器仍不写密钥。重新导入无密钥候选或正式DSL时需保留或重新绑定Secret，不能以界面的星号显示判断鉴权是否有效。
 用户已确认“普通卧式金属车床”及现有6项检查用于本轮公开图片技术测试，config/checklist.json保存实际确认记录；扩大设备或业务范围时重新确认。照片来源、作者、许可证及原文件哈希见 fixtures/stage_d_public_images.provenance.json；具体图片、表单和运行证据在 data/stage_d_web/，它们不是用户现场设备。
 原候选 Qwen/Qwen2.5-VL-32B-Instruct 实测返回403 Model disabled。当前改用同一提供方的 Qwen/Qwen3.5-27B，两个节点均显式设置 enable_thinking=false；该参数已在实际云端单步双图调用中验证。普通候选不增加凭据或额外模型服务。
 在Dify界面切换模型时，本轮观察到图片变量选择被清空；切换后必须重新核对两个节点仍使用 start.images。生成器固定这两个绑定。单步请求若超时，界面可能保留上一次SUCCESS缓存，须核对本次开始时间、输入图片及输出，不能把旧结果当成新结果。
@@ -68,7 +70,7 @@ fixed 模式仅使用明确标记为软件联通测试的固定观察和固定�
 固定观察测试的 /evidence/prepare、/reports/finalize 均由Dify HTTP节点实际调用，最终Markdown哈希与SQLite保存版本一致。完整运行时，这两个接口及响应校验均不可绕过。该结果未使用真实照片或生成模型，不能替代视觉工作流验收。
 真实 Workflow 检索 fixture 已保存为 fixtures/dify_workflow_retrieval.real.json，与 Knowledge API records[].segment 分开适配。单图与双图完整报告各覆盖6项检查并回填18处引用，原文、哈希、图片和检查项归属均已核对；两个模型的原生运行输入包含相同顺序和相同标识的两张图片。具体运行ID、耗时和报告哈希见docs/acceptance.md。
 
-正式文件由已验证候选生成，非未经验证的手写DSL，也未冒称取得Dify下载导出文件。候选SHA-256为910ed9a8e0ddd8bcfee4149e1d7c3de067e066dfaff8fc1b950d431584380e99，LF格式交付文件SHA-256为fd966928c81076c11d3213a1c12719e6b237240fcfa6f74616bb643c1b06bb97；解析后的结构和值完全一致。
+正式文件基于既有已验证DSL更新，未冒称取得Dify下载导出文件。v3的8个共享代码副本已在工作台原位修改并回读SHA-256，与交付文件中的对应代码一致；未重新导入或接触现有Secret。完整运行通过后同步正式文件，SHA-256为e389dcd26e401323e4d6a85c709163158ac0b12dec18a708258e9f008830e8c5。v2的历史哈希和验收记录保留在docs/acceptance.md。
 
 导入其他环境时的绑定要求：
 
@@ -77,6 +79,6 @@ fixed 模式仅使用明确标记为软件联通测试的固定观察和固定�
 | 证据API地址与凭据 | EVIDENCE_API_BASE_URL、EVIDENCE_API_TOKEN Secret；从HTTP节点验证健康检查和鉴权 |
 | 知识快照与知识库 | SNAPSHOT_ID、DATASET_ID、原生检索节点dataset_ids，以及证据服务已激活快照和分块映射 |
 | 视觉模型 | 两个LLM节点的provider/name/参数与MODEL_ID；重新核对两个start.images绑定 |
-| 设备清单 | 经确认的CHECKLIST_JSON与User Input的equipment_type选项；本轮版本stage-d-v2 |
+| 设备清单 | 经确认的CHECKLIST_JSON与User Input的equipment_type选项；本轮版本stage-d-v3 |
 
 模型仍会误识别部件或材质，确定性校验不能证明风险解释正确。专业复核与阶段E业务评测不可省略；工作流未公开发布，Quick Tunnel只作为临时联调入口。

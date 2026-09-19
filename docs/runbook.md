@@ -114,16 +114,17 @@ workflows/workflow-spec.md 是节点、变量和部署绑定的主规格。生�
 .\.venv\Scripts\uv.exe run python -m workflows.build_candidate --mode vision --output data/workflows/safety-assessment.candidate.yml --model Qwen/Qwen3.5-27B --evidence-url https://实际受控服务地址
 ```
 
-生成器不包含密钥，始终输出待验证的新候选。当前可直接选择workflows/safety-assessment.yml导入Dify；该正式文件已完成本轮单图、同机双图完整运行及混设备拒绝验收。工作台未发布，导入后先重新绑定Secret和本环境的服务、模型及知识库配置。
+生成器不包含密钥，始终输出待验证的新候选。当前可选择workflows/safety-assessment.yml导入Dify；stage-d-v3已完成本轮单图、同机双图完整运行及原失败输入回放。混设备拒绝的既有验收记录另行保留，相关检查未改。工作台未发布，导入后先重新绑定Secret和本环境的服务、模型及知识库配置。
 本轮config/checklist.json已由用户确认用于普通卧式金属车床公开图片技术测试；部署到新业务范围前重新确认，并同步CHECKLIST_JSON和User Input设备类别选项。
 两个LLM绑定同一份 start.images 和同一模型。使用同一设备的1～4张实拍图，先执行输入限制反例，再运行完整流程。
 EVIDENCE_API_BASE_URL 必须指向管理员控制、Dify Cloud可达的证据服务；已有Compose内网默认主机名不能直接用于云实例。Bearer值仅通过Dify Secret配置，不放进候选文件或提示词。
-本轮已使用用户提供的Quick Tunnel地址，并经明确授权保存EVIDENCE_API_TOKEN到当前工作流Secret。临时配置载荷已删除。普通无密钥候选重新导入后，务必核对Secret是否保留；星号不代表一定有有效值。
+先前联调已配置Quick Tunnel地址，并经用户授权保存EVIDENCE_API_TOKEN到工作流Secret，临时载荷已删除。v3沿用现有配置，只原位修改代码及版本。普通无密钥候选重新导入后，务必核对Secret是否保留；星号不代表一定有有效值。
 Quick Tunnel的当前地址在data/quick_tunnel/runtime.json；进程需持续运行。重新启动后按data/quick_tunnel/README.md操作，并更新Dify EVIDENCE_API_BASE_URL。不能直接重启启动脚本覆盖已经运行的服务。
-正式workflows/safety-assessment.yml与已实际导入、运行的stage-d-v2候选配置一致，仅统一LF行尾且不包含Secret值；不是Dify原生下载导出的文件。当前只完成技术验收，未将工作流发布供业务使用，进入阶段E需另行开展人工业务评测和内部试用。
+正式workflows/safety-assessment.yml已同步stage-d-v3的工作台配置，使用UTF-8/LF且不包含Secret值；本次通过界面原位更新并逐项核对代码哈希，未重新导入覆盖已有Secret，也未冒称取得Dify原生导出文件。当前只完成技术验收，未将工作流发布供业务使用，进入阶段E需另行开展人工业务评测和内部试用。
 
 公开图片测试资料在 data/stage_d_web/：resources.json记录来源、许可证、尺寸与哈希；input.single.json、input.multi.json、input.mixed-negative.json为表单文本，images路径用于本地选文件，不直接传入API。mixed-negative的预期分类只记录在测试证据中，不能写入模型输入作为答案提示。checklist.proposed.json保留确认前草案，实际确认记录在checklist-confirmation.json和config/checklist.json。
 本次图片由浏览器从Wikimedia Commons已加载的原始尺寸资源下载；命令行请求返回403时已停止该下载路径。Windows文件选择器使用绝对正斜杠路径，例如 D:/RAG-Dify/data/stage_d_web/images/hwacheon-overview.jpg；每张JPEG均低于5 MiB。
 Qwen/Qwen2.5-VL-32B-Instruct已实测不可用；当前生成器对Qwen/Qwen3.5-27B使用官方插件声明的enable_thinking=false。单步执行超时后需查看浏览器错误日志及运行时间，避免误读上次缓存。单步观察输出不能代替/reports/finalize的完整工作流结果。
 
-本轮完整报告导出为data/reports/stage-d-single-real.md和stage-d-multi-real.md及对应JSON。data/stage_d_web/verify_report.py可在本地.venv中复核指定报告与Dify输出哈希、原文快照、HTTPS查询和重复请求；具体命令见验收记录。stage-d-single-initial-citation-issue.*是修复前不予接受的试运行，保留用于排错，不能与最终验收报告混用。
+历史v2完整报告及验证脚本保留在data/reports/和data/stage_d_web/。本轮v3报告、验证脚本与证据独立保存在data/retests/citation-compatibility-20260919/，报告为report-single.md、report-multi.md及对应JSON，未覆盖历史结果；具体命令见验收记录。stage-d-single-initial-citation-issue.*是早期不予接受的试运行，保留用于排错，不能与当前验收报告混用。
+模型正文中重复出现已列入该项evidence_ids且合法的证据ID时，v3允许原样继续。正文ID未登记或引用越权时仍停止，不通过补选、删字或跳过服务端校验强行完成。此次修复不改变提示词、模型、检索参数、证据输入内容或接口字段。
