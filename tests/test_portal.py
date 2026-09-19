@@ -73,6 +73,17 @@ def test_local_csrf_and_configuration_boundary(portal):
     assert "Content-Security-Policy" in client.get("/").headers
 
 
+def test_oversized_pdf_rejected_before_creating_job(tmp_path):
+    config = PortalSettings(data_root=tmp_path, app_env="test", max_pdf_bytes=100)
+    app = create_app(config)
+    with TestClient(app, base_url=config.origin) as client:
+        token = client.get("/api/status").json()["csrf_token"]
+        client.headers.update({"Origin": config.origin, "X-CSRF-Token": token})
+        response = client.post("/api/documents", files={"file": ("synthetic.pdf", pdf_bytes(), "application/pdf")})
+        assert response.status_code == 413
+        assert not app.state.store.jobs()
+
+
 def test_restart_and_ambiguous_assessment_never_resubmit(portal):
     _, store, _ = portal
     item = store.enqueue("assessment", {"snapshot_id": "snapshot_1"}, "submission_1")
@@ -88,6 +99,18 @@ def test_restart_and_ambiguous_assessment_never_resubmit(portal):
     assert store.retry(item["id"])["status"] == "queued"
 
 
+def test_recovery_preserves_previous_stage_error(portal):
+    client, store, _ = portal
+    job = store.enqueue("parse", {"document_id": "synthetic"})
+    store.claim()
+    store.progress(job["id"], "parsing", status="failed", error={"code": "parse_error", "message": "合成错误"})
+    store.retry(job["id"])
+    store.progress(job["id"], "complete", status="succeeded")
+    history = client.get("/api/jobs/" + job["id"]).json()["events"]
+    assert history[0]["error"]["code"] == "parse_error"
+    assert history[-1]["status"] == "succeeded"
+
+
 def test_revision_conflicts_and_atomic_release_pointer(portal):
     _, store, _ = portal
     doc, _ = store.register_document("a" * 64, "synthetic.pdf", "raw_pdf/synthetic.pdf", 1)
@@ -100,3 +123,40 @@ def test_revision_conflicts_and_atomic_release_pointer(portal):
     assert store.state("current_snapshot") == "snapshot_1"
     store.publish("job_2", "snapshot_2", 2, 2, "snapshot_1")
     assert len(store.releases()) == 2
+
+
+def test_portal_evidence_blocks_active_but_unpublished_snapshot(tmp_path):
+    from app.portal.evidence_api import PortalEvidenceRepository
+    from conftest import seed
+    config = PortalSettings(data_root=tmp_path, app_env="test")
+    repo = PortalEvidenceRepository(config)
+    repo.initialize()
+    seed(repo)
+    assert not repo.snapshot_active("demo_snapshot")
+    repo.portal.publish("publish1", "demo_snapshot", 4, 1, "")
+    assert repo.snapshot_active("demo_snapshot")
+    assert not repo.snapshot_active("unpublished")
+
+
+def test_assessment_submission_pins_version_and_duplicate_does_not_enqueue_twice(tmp_path):
+    from PIL import Image
+    from conftest import seed
+    from app.repository import Repository
+    config = PortalSettings(data_root=tmp_path, app_env="test", dataset_id="demo_dataset", knowledge_api_key="synthetic",
+        workflow_api_key="synthetic", evidence_api_token="synthetic", evidence_public_url="https://evidence.invalid")
+    app = create_app(config)
+    with TestClient(app, base_url=config.origin) as client:
+        token = client.get("/api/status").json()["csrf_token"]
+        client.headers.update({"Origin": config.origin, "X-CSRF-Token": token})
+        seed(Repository(config.evidence_settings().db_path))
+        app.state.store.publish("publish1", "demo_snapshot", 4, 1, "")
+        image = io.BytesIO()
+        Image.new("RGB", (24, 24), "white").save(image, format="PNG")
+        data = {"work_context": "合成测试", "same_equipment_confirmed": "true", "submission_id": "submission_1"}
+        files = {"images": ("synthetic.png", image.getvalue(), "image/png")}
+        first = client.post("/api/assessments", data=data, files=files)
+        assert first.status_code == 200
+        second = client.post("/api/assessments", data=data, files=files)
+        assert second.json()["id"] == first.json()["id"]
+        app.state.store.publish("publish2", "new_version", 6, 1, "demo_snapshot")
+        assert app.state.store.job(first.json()["id"])["payload"]["snapshot_id"] == "demo_snapshot"

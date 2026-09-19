@@ -183,12 +183,18 @@ def release_preview(store, evidence_repo, document_ids):
     incoming = {row["standard_uid"] for row in records}
     old = {row["standard_uid"] for row in baseline}
     replacements = sorted(incoming & old)
-    combined = [*deepcopy([row for row in baseline if row["standard_uid"] not in incoming]), *records]
+    combined = [ClauseRecord.model_validate(row).model_dump() for row in
+                [*[row for row in baseline if row["standard_uid"] not in incoming], *records]]
     for row in combined:
         row["snapshot_id"] = ""
     combined.sort(key=lambda row: row["clause_uid"])
+    comparable = deepcopy(baseline)
+    for row in comparable:
+        row["snapshot_id"] = ""
+    comparable.sort(key=lambda row: row["clause_uid"])
     preview = {"parent": parent, "document_revisions": revisions, "records": combined,
                "pending_count": pending_count, "replacements": replacements,
+               "unchanged": bool(parent) and combined == comparable,
                "clause_count": len(combined), "standard_count": len({row["standard_uid"] for row in combined})}
     preview["preview_hash"] = digest(preview)
     return preview

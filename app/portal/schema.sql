@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS releases (
     published_at TEXT NOT NULL, clause_count INTEGER NOT NULL, standard_count INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_events (
+    id INTEGER PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(id),
+    stage TEXT NOT NULL, status TEXT NOT NULL, error_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS review_audit (
     id INTEGER PRIMARY KEY, document_id TEXT NOT NULL, revision INTEGER NOT NULL,
     action TEXT NOT NULL, actor TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL

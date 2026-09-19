@@ -138,3 +138,19 @@ def test_changing_dependency_invalidates_approved_dependents(parsed):
         payload = review.approve(payload, item["id"], "test-reviewer", ["text", "boundary", "context", "assets", "scope"], config.data_root)
     changed = review.edit_candidate(payload, first["id"], {"text_verbatim": "【合成测试】依赖条件已修改"}, ["p0_b0"], config.data_root)
     assert all(item["record"]["content_review_status"] == "pending" for item in changed["candidates"])
+
+
+def test_unchanged_cumulative_content_is_not_a_new_release(parsed, tmp_path):
+    config, store, doc = parsed
+    payload = review.update_metadata(doc["payload"], metadata())
+    for item in payload["candidates"]:
+        payload = review.approve(payload, item["id"], "test-reviewer", ["text", "boundary", "context", "assets", "scope"], config.data_root)
+    store.save_document(doc["id"], doc["revision"], payload, "pending_review", "test", "test-reviewer")
+    repo = Repository(config.evidence_settings().db_path)
+    repo.initialize()
+    preview = review.release_preview(store, repo, [doc["id"]])
+    path = tmp_path / "approved.jsonl"
+    path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in preview["records"]), encoding="utf-8")
+    import_reviewed(path, "v1", repo, config.evidence_settings())
+    store.publish("publish1", "v1", 2, 1, "")
+    assert review.release_preview(store, repo, [doc["id"]])["unchanged"] is True

@@ -37,3 +37,21 @@
 本轮可复验依据为应用 Git 提交、uv.lock、原 PDF 与批准条款哈希、不可变业务快照、实际索引映射以及 fixtures/dify_cloud/provenance.json。云平台更新不受本项目锁文件控制；切换自建部署时需补齐实例 tag/commit、镜像 digest 和模型插件版本，并重新跑真实契约验收。
 
 模型调整依据：[SiliconFlow服务调整公告](https://docs.siliconflow.cn/docs/release-notes/overview)列出旧视觉模型下线；[官方插件模型声明](https://github.com/langgenius/dify-official-plugins/blob/main/models/siliconflow/models/llm/qwen3.5-27b.yaml)与[Qwen模型卡](https://huggingface.co/Qwen/Qwen3.5-27B)说明新模型的视觉和参数契约。可用性以本项目本轮真实调用为准，不由界面列出模型推断。
+
+## 本地测试台运行基线（2026-09-20）
+
+| 项目 | 本轮实测 |
+|---|---|
+| 本地入口 | 127.0.0.1:8001；独立证据服务8002；独立单worker |
+| 数据目录 | data/portal；portal.db任务/复核/历史与evidence.db五张证据业务表分开 |
+| 新增依赖 | python-multipart 0.0.32、Pillow 12.3.0、pypdfium2 5.13.0；精确锁定于uv.lock |
+| 页面 | HTML + 原生JavaScript；无需Node构建；编辑时一次性使用Prettier 3.6.2整理格式 |
+| MinerU | 4.0.2，all/zip/standard/auto；本轮文本PDF34页、扫描PDF10页完整覆盖 |
+| 新Workflow | portal-v1，独立应用；服务API已发布，公开Web App停用；原stage-d-v3应用保持独立 |
+| 多模态/嵌入 | 沿用Qwen/Qwen3.5-27B、enable_thinking=false及Qwen/Qwen3-Embedding-4B |
+| 版本过滤 | rag_snapshot_id字符串字段，原生检索手动is条件引用start.snapshot_id；Service API条件嵌套于retrieval_model |
+| 知识版本 | portal_6bcc6616a6f5feea9fe8868b：4条；portal_6478a1021d2231b9be0b1e2b：10条，当前版本 |
+| 真实结果 | 单图117.810s、双图143.535s成功；混设备23.159s在范围门禁拒绝；不作时延/准确率承诺 |
+| 临时HTTPS | 专用Quick Tunnel实际地址和进程记录位于data/portal-runtime/tunnel.json；更换地址须重新绑定 |
+
+交付workflows/portal.template.yml为无密钥、无实例绑定模板，workflows/build_portal.py生成本机候选。真实导入运行文件保存在忽略目录；不把模板声称为已绑定其他开发者环境。Dify Cloud的实例commit和容器镜像仍不可由当前接口验证。

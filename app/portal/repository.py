@@ -91,14 +91,26 @@ class PortalRepository(Repository):
 
     def progress(self, job_id, stage, result=None, status="running", error=None):
         with self.connect(write=True) as conn:
+            previous = conn.execute("SELECT stage,status FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if not previous:
+                raise DomainError("not_found", "找不到此任务", status=404)
+            if previous["stage"] != stage or previous["status"] != status or error:
+                conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) VALUES(?,?,?,?,?)",
+                    (job_id, stage, status, json_text(error or {}), now()))
             conn.execute("UPDATE jobs SET stage=?,status=?,updated_at=?,error_json=? WHERE id=?",
                 (stage, status, now(), json_text(error or {}), job_id))
             if result is not None:
                 conn.execute("UPDATE jobs SET result_json=? WHERE id=?", (json_text(result), job_id))
 
+    def events(self, job_id):
+        self.job(job_id)
+        with self.connect() as conn:
+            return [decode(row) for row in conn.execute("SELECT * FROM job_events WHERE job_id=? ORDER BY id", (job_id,))]
+
     def recover(self):
         # 仅在取得操作系统独占 worker 锁后调用。
         with self.connect(write=True) as conn:
+            conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) SELECT id,stage,'interrupted','{}',? FROM jobs WHERE status='running'", (now(),))
             conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE status='running'", (now(),))
 
     def retry(self, job_id):

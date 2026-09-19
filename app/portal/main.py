@@ -211,7 +211,7 @@ def create_app(config=None):
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str):
-        return public_job(store.job(job_id))
+        return {**public_job(store.job(job_id)), "events": store.events(job_id)}
 
     @app.post("/api/jobs/{job_id}/retry")
     def retry(job_id: str):
@@ -231,6 +231,8 @@ def create_app(config=None):
         candidate = review.release_preview(store, evidence, body.document_ids)
         if candidate["preview_hash"] != body.preview_hash:
             raise DomainError("revision_conflict", "预览已过期，请重新预览", status=409)
+        if candidate["unchanged"]:
+            raise DomainError("unchanged_snapshot", "已批准内容与当前版本完全一致，无需重复建立索引", status=409)
         if candidate["replacements"] and not body.confirm_replacements:
             raise DomainError("replacement_confirmation", "本次将替换同标准版本的条款集合，请确认预览", status=409)
         if not body.actor.strip() or not body.cases:

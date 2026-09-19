@@ -68,10 +68,13 @@ class PortalSettings:
             api_token=self.evidence_api_token, published_snapshots=True, partitioned_dataset=True)
 
     def readiness(self):
+        public_url = urlsplit(self.evidence_public_url)
         return {"mineru": self.mineru_executable.is_file(),
             "knowledge": configured(self.knowledge_api_key) and configured(self.dataset_id),
             "workflow": configured(self.workflow_api_key), "evidence_token": configured(self.evidence_api_token),
-            "evidence_https": urlsplit(self.evidence_public_url).scheme == "https"}
+            "evidence_https": public_url.scheme == "https" and bool(public_url.hostname)
+                and not any((public_url.username, public_url.password, public_url.query, public_url.fragment))
+                and "REPLACE_" not in self.evidence_public_url.upper()}
 
     def require_assessment(self):
         missing = [key for key, ok in self.readiness().items() if key != "mineru" and not ok]
