@@ -31,6 +31,9 @@ class Settings:
     dify_timeout_seconds: float = 30
     dify_index_timeout_seconds: float = 600
     dify_poll_seconds: float = 2
+    # 仅由独立本机门户实例显式启用；旧服务保持单快照行为。
+    published_snapshots: bool = False
+    partitioned_dataset: bool = False
 
     def __post_init__(self):
         if self.app_env not in {"development", "production", "test"}:

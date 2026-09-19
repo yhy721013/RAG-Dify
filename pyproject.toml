@@ -11,6 +11,8 @@ dependencies = [
   "uvicorn>=0.34,<1",
   "python-dotenv>=1.1,<2",
   "pypdf>=5,<7",
+  "python-multipart>=0.0.20,<1",
+  "pillow>=11,<13",
 ]
 
 [dependency-groups]
