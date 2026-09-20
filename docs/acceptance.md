@@ -374,3 +374,8 @@
 - 原门户与worker已加载最新实现，8002证据服务与原HTTPS地址保持；最新13项只读环境检查均通过，model_invoked=false，真实链路项仅引用此前已保存的报告。为覆盖门户崩溃/开发重载后的隧道进程关系变化，停止脚本独立核对托管隧道PID/创建时间/8002来源；WhatIf列出的仅为本实例三角色及登记隧道，没有实际终止它们。
 - 工作区.venv全量 python -X utf8 -m pytest -q：**192 passed in 7.67s**，2条既有第三方弃用警告（原166项+新增26项）。JS语法、Prettier及PowerShell停止脚本语法通过，git diff --check通过。34处本地文档链接/锚点有效，130个当前源码文件中已知服务凭据精确匹配0；记录source-audit.json。后续仅微调基准状态显示文案并通过JS语法检查。
 - 本轮采用rules-v1而非新LLM，规则可能漏检或误报，无疑点不代表OCR正确。状态核验、适用性、条款批准和最终报告仍需人工；未进入阶段E业务准确率评测。规则结果、解析回放、隔离合成界面验证与真实云端历史报告分开记录，源码交付不附带业务PDF/解析包/数据库/密钥。
+
+### 最终源码包复验
+
+- 85bd9fc干净HEAD导出130个源码文件，解压到tmp/assisted-delivery-85bd9fc，在该目录用工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：192 passed in 7.89s，2条既有弃用警告。包内无运行配置、data/test_files/tmp/虚拟环境，当前已知凭据匹配0；记录archive-check.json。
+- 最终源码包从包含此文档补记的干净HEAD重新导出，应用、测试和依赖与已复验的85bd9fc相同。门户、worker、证据服务和原HTTPS入口保留运行；真实新增批准/发布仍须用户在页面完成。
