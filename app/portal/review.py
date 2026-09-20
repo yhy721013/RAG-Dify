@@ -129,6 +129,30 @@ def batch_review(payload, candidate_ids, actor, acknowledgements, root, analysis
     return result
 
 
+def reorganize_candidate(payload, candidate_id, proposal):
+    if not proposal or not proposal["eligible"]:
+        raise DomainError("review_required", (proposal or {}).get("reason") or "此段没有可以安全应用的自动分段建议")
+    result = deepcopy(payload)
+    current = item_for(result, candidate_id)
+    if current["record"]["content_review_status"] == "approved":
+        raise DomainError("review_required", "不能用自动整理覆盖批准记录")
+    previous_uid = current["record"].get("clause_uid")
+    rebuilt = []
+    for index, part in enumerate(proposal["parts"]):
+        record = deepcopy(part)
+        record.update({key: current["record"].get(key, "") for key in METADATA})
+        record["is_test_fixture"] = current["record"]["is_test_fixture"]
+        if record["standard_code"] and record["edition"]:
+            identify(record)
+        ClauseRecord.model_validate(record)
+        rebuilt.append({"id": candidate_id if index == 0 else "candidate_" + uuid4().hex, "record": record})
+    position = result["candidates"].index(current)
+    result["candidates"][position:position + 1] = rebuilt
+    if previous_uid:
+        invalidate_dependents(result, previous_uid)
+    return result
+
+
 def approve(payload, candidate_id, actor, acknowledgements, root):
     result = deepcopy(payload)
     record = item_for(result, candidate_id)["record"]
@@ -232,8 +256,10 @@ def release_preview(store, evidence_repo, document_ids):
         "before": sum(row["standard_uid"] == sid for row in baseline),
         "after": sum(row["standard_uid"] == sid for row in combined)} for sid in replacements]
     by_uid = {row["clause_uid"]: row for row in combined}
+    # 同标准新旧文件共享条款UID时，阻塞链接应优先指向本次所选文件。
+    location_docs = sorted(store.list_documents(), key=lambda doc: doc["id"] in document_ids)
     locations = {item["record"].get("clause_uid"): {"document_id": doc["id"], "candidate_id": item["id"]}
-                 for doc in store.list_documents() for item in doc["payload"].get("candidates", [])}
+                 for doc in location_docs for item in doc["payload"].get("candidates", [])}
     blockers = []
     def block(record, code, message, target=None):
         blockers.append({"code": code, "clause_uid": record["clause_uid"], "clause_no": record["clause_no"],

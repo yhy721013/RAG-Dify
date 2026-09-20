@@ -44,7 +44,7 @@ def candidates(document: dict, data_root: Path) -> list[dict]:
                     review_issues=["text_review_required", "standard_metadata_required", "boundary_review_required", "context_review_required"])
             current["text_verbatim"] += ("\n" if current["text_verbatim"] else "") + text
             current["source_spans"].append({"pdf_page_index": page["pdf_page_index"],
-                "printed_page_label": page["printed_page_label"], "block_ids": [block["block_id"]], "bbox": block["bbox"]})
+                "printed_page_label": page["printed_page_label"], "block_ids": [block["block_id"]], "bbox": block.get("bbox")})
             current["asset_refs"].extend(block["asset_refs"])
             current["review_issues"].extend(block["review_issues"])
             if kind in {"table", "image", "chart", "equation"}:

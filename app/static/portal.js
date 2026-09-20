@@ -541,10 +541,20 @@ function listValue(id) {
     .filter(Boolean);
 }
 async function candidateAction(action, extra = {}) {
-  if (action !== "edit") ensureSavedReview();
+  if (action === "organize") {
+    if (reviewDirty()) throw new Error("请先保存手工修改，再应用结构建议");
+  } else if (action !== "edit") ensureSavedReview();
   const doc = await post(
     `/api/documents/${currentDoc.id}/candidates/${selectedCandidate}/${action}`,
-    { revision: currentDoc.revision, actor: actor(), ...extra },
+    {
+      revision: currentDoc.revision,
+      actor: actor(),
+      baseline_id:
+        currentDoc.assistance?.baseline?.id !== currentDoc.id
+          ? currentDoc.assistance?.baseline?.id || ""
+          : "",
+      ...extra,
+    },
   );
   fillDocument(doc, selectedCandidate);
   message(
@@ -657,11 +667,25 @@ $("#preview-release").addEventListener("click", () =>
       (n) => n.value,
     );
     if (!ids.length) throw new Error("请先勾选标准文件");
-    releasePreview = await post("/api/releases/preview", { document_ids: ids });
-    caseRows = (releasePreview.case_draft?.cases || []).map((row) => ({
-      ...row,
-      confirmed: false,
-    }));
+    const nextPreview = await post("/api/releases/preview", {
+      document_ids: ids,
+    });
+    if (nextPreview.preview_hash !== releasePreview?.preview_hash) {
+      if (
+        releasePreview &&
+        caseRows.length &&
+        !confirm("批准范围已变化，将重新生成检索问题草稿并清除原确认。继续？")
+      ) {
+        $("#release-panel").hidden = true;
+        message("已保留原问题。重新选择原范围并预览可继续。");
+        return;
+      }
+      caseRows = (nextPreview.case_draft?.cases || []).map((row) => ({
+        ...row,
+        confirmed: false,
+      }));
+    }
+    releasePreview = nextPreview;
     $("#release-summary").textContent =
       `基础版本：${releasePreview.parent || "空库"}\n本次形成：${releasePreview.standard_count} 份标准 / ${releasePreview.clause_count} 条已批准条款\n未纳入的待复核条款：${releasePreview.pending_count}\n被替换的同标准版本：${releasePreview.replacements.join(", ") || "无"}`;
     $("#release-clauses").textContent = releasePreview.records
@@ -675,6 +699,9 @@ $("#preview-release").addEventListener("click", () =>
     if (releasePreview.unchanged)
       $("#release-summary").textContent +=
         "\n已批准内容没有变化，无需重复发布。";
+    if (releasePreview.case_draft?.truncated)
+      $("#release-summary").textContent +=
+        "\n本次最多生成100道问题草稿，请按复核范围选择或修改，不代表覆盖所有条款。";
     renderReleaseEditor();
     $("#release-panel").hidden = false;
     $("#confirm-replace").checked = false;
@@ -1213,7 +1240,13 @@ function drawCases() {
       element("span", "这是无答案问题（本次已批准语料不包含答案）"),
     );
     const targets = element("div", undefined, "option-list");
-    for (const clause of releasePreview.records) {
+    const sortedTargets = [...releasePreview.records].sort(
+      (a, b) =>
+        Number(row.expected_clause_uids.includes(b.clause_uid)) -
+          Number(row.expected_clause_uids.includes(a.clause_uid)) ||
+        a.clause_no.localeCompare(b.clause_no, "zh-CN", { numeric: true }),
+    );
+    for (const clause of sortedTargets) {
       const l = element("label", undefined, "check"),
         box = element("input");
       box.type = "checkbox";
@@ -1226,6 +1259,7 @@ function drawCases() {
           ? [...row.expected_clause_uids, clause.clause_uid]
           : row.expected_clause_uids.filter((u) => u !== clause.clause_uid);
         syncCasesJson();
+        showTargetText();
       });
       l.append(
         box,
@@ -1253,12 +1287,29 @@ function drawCases() {
       confirmCase,
       element("span", "我已核对本题与预期命中条款，确认可用于检索自检"),
     );
+    const fullTargets = element("details");
+    function showTargetText() {
+      fullTargets.replaceChildren(element("summary", "核对预期目标条款全文"));
+      for (const clause of releasePreview.records.filter((c) =>
+        row.expected_clause_uids.includes(c.clause_uid),
+      ))
+        fullTargets.append(
+          element("h4", `${clause.standard_code} §${clause.clause_no}`),
+          element("pre", clause.text_verbatim),
+        );
+      if (!row.expected_clause_uids.length)
+        fullTargets.append(
+          element("p", "无目标条款，请核对无答案标注或选择目标。"),
+        );
+    }
+    showTargetText();
     card.append(
       title,
       label,
       noneLabel,
       element("p", "勾选预期命中的条款（可多选，必须由复核人确认）：", "hint"),
       targets,
+      fullTargets,
       confirmLabel,
     );
     const allowed = new Set(releasePreview.records.map((r) => r.clause_uid));

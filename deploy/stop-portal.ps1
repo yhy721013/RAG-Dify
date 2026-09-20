@@ -13,7 +13,16 @@ if (-not $Force) {
     } finally { Pop-Location }
 }
 $state = Get-Content -LiteralPath $portalStatePath -Raw -Encoding utf8 | ConvertFrom-Json
-foreach ($entry in @($state.processes)[($state.processes.Count-1)..0]) {
+$processEntries = @($state.processes)
+# 门户崩溃或开发重载后，已登记的隧道可能不再属于新门户的子进程树。
+$tunnelStatePath = Join-Path $portalRoot 'data\portal-runtime\managed-tunnel.json'
+if (Test-Path -LiteralPath $tunnelStatePath) {
+    $tunnelState = Get-Content -LiteralPath $tunnelStatePath -Raw -Encoding utf8 | ConvertFrom-Json
+    if ($tunnelState.id -and $tunnelState.role -eq 'portal-tunnel' -and $tunnelState.origin -eq 'http://127.0.0.1:8002') {
+        $processEntries += $tunnelState
+    }
+}
+foreach ($entry in $processEntries[($processEntries.Count-1)..0]) {
     $process = Get-Process -Id $entry.id -ErrorAction SilentlyContinue
     if ($process -and $process.StartTime.ToUniversalTime().Ticks -eq ([DateTimeOffset]$entry.started_at).UtcDateTime.Ticks) {
         if ($PSCmdlet.ShouldProcess("$($entry.role) PID=$($entry.id)", '停止已登记的进程及子进程')) {

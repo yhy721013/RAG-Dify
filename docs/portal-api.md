@@ -20,7 +20,8 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 | POST /api/diagnostics | source、draft_id；返回任务 ID；逐项只读检查，不调用模型 |
 | POST /api/documents | multipart `file`；返回 document_id、页数、状态、是否复用 |
 | GET /api/documents | 文件、页数、批准/候选计数、状态 |
-| GET /api/documents/{id} | 完整待复核记录、normalized 来源、revision 与图表链接 |
+| GET /api/documents/{id} | 完整记录、来源、revision、图表链接及assistance；可选baseline_id指定同标准/版本的批准基准 |
+| POST /api/documents/{id}/review/{apply_context/approve_batch} | revision、review_hash、actor、candidate_ids（1～100）、可选baseline_id；批准需五项acknowledgements；单事务保存 |
 | GET /api/review/options | 各标准候选条款的可读选择项与身份，供上下文选择器使用 |
 | GET /api/documents/{id}/pdf | 归档原 PDF |
 | GET /api/documents/{id}/pages/{number} | 从 1 开始的原 PDF PNG 页预览；不修改原文件 |
@@ -30,8 +31,9 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 | POST …/approve | revision、actor、acknowledgements，须含 text/boundary/context/assets/scope |
 | POST …/split | revision、actor、offset；按已保存文本偏移拆分，之后重新复核 |
 | POST …/merge | revision、actor、candidate_ids；按指定顺序合并，保留来源 |
-| POST /api/releases/preview | document_ids；返回基础版本、替换集合、待复核数、批准子集、preview_hash |
-| POST /api/releases | 同一 document_ids、preview_hash、confirm_replacements、actor、cases；返回发布任务 |
+| POST …/organize | revision、actor、review_hash、可选baseline_id；应用服务器重算的结构建议，仅替换未经人工修订的待复核段，原子保留来源并撤销受影响依赖批准 |
+| POST /api/releases/preview | document_ids；返回基础版本、替换集合、待复核数、批准子集、preview_hash及case_draft |
+| POST /api/releases | 同一 document_ids、preview_hash、confirm_replacements、actor、cases；自动草稿另传case_draft_id及confirmed_case_ids，返回发布任务 |
 | GET /api/releases | 当前版本指针及全部已发布版本 |
 | POST /api/assessments | multipart images（1～4）、equipment_description、operating_state、work_context、same_equipment_confirmed、submission_id |
 | GET /api/jobs / GET /api/jobs/{id} | 有限任务状态、阶段、结果 ID、脱敏错误，不返回原始 SSE |
@@ -49,3 +51,5 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 错误保留原有 error.code/message/field；扩展 stage、request_id、suggestion、details，其中上游状态/代码/失败节点经过脱敏，不返回请求头、原始模型输入输出。422 返回字段名而不返回提交值。配置的外部修改、活动任务、知识库归属冲突均返回明确错误而不是自动覆盖。
 
 `portal.db` 的 documents/jobs/releases/state/review_audit/job_events 与 `evidence.db` 五张业务表分离。GET 单个任务额外返回阶段历史 events；恢复任务不删除既有错误记录，历史中不包含原始 SSE 或密钥。PDF、解析及导出保存在配置的数据根目录。门户证据服务只接受同时在 releases 登记且证据库 active 的知识版本；旧服务继续使用单一 ACTIVE_SNAPSHOT_ID。
+
+规则辅助信息独立于ClauseRecord，包含metadata_draft及来源、文档检查、每条issues/分组/层级/上下文建议/数字单位片段/diff、基准及review_hash。它不赋予批准状态；批量确认哈希涵盖当前payload、基准和规则检查，外部归档/资产变化也会阻止沿用。相同SHA上传保留原文档和批准；不同文件只提供对照，新来源仍需人工确认。问题确认进入发布任务的case_review，原人工cases结构保持兼容；draft_前缀保留给规则草稿，缺少case_draft_id时拒绝执行。

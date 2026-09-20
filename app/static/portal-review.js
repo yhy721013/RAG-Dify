@@ -54,6 +54,23 @@ window.reviewUI = (() => {
           "notice warning",
         ),
       );
+    if (Object.keys(data.metadata_changes || {}).length) {
+      const changed = element("details");
+      changed.append(
+        element(
+          "summary",
+          "标准信息变更（核验日期/来源变化单列，不算原文变化）",
+        ),
+      );
+      for (const [key, value] of Object.entries(data.metadata_changes))
+        changed.append(
+          element(
+            "p",
+            `${metadataNames[key] || key}：${value.before} → ${value.after}`,
+          ),
+        );
+      checks.append(changed);
+    }
     const baseline = $("#review-baseline");
     baseline.replaceChildren();
     const auto = element(
@@ -173,7 +190,9 @@ window.reviewUI = (() => {
         element(
           "h4",
           row.diff.previous_text
-            ? "原批准基准/历史版本"
+            ? row.diff.previous_approved
+              ? "基准原文（该条曾批准）"
+              : "历史原文（该条未批准）"
             : "解析来源块（仍须对照PDF）",
         ),
       );
@@ -254,6 +273,40 @@ window.reviewUI = (() => {
     root.replaceChildren();
     const row = $row(selectedCandidate);
     if (!row) return;
+    if (row.structure_proposal) {
+      const plan = row.structure_proposal,
+        panel = element("details");
+      panel.append(
+        element("summary", `识别到 ${plan.parts.length} 段结构建议`),
+        element("p", plan.reason || plan.note),
+      );
+      for (const part of plan.parts) {
+        const detail = element("details");
+        detail.append(
+          element("summary", `建议层级 ${part.clause_path.join(" → ")}`),
+          element("pre", part.text_verbatim),
+        );
+        panel.append(detail);
+      }
+      const apply = element("button", "按建议整理为待复核条款", "secondary");
+      apply.type = "button";
+      apply.disabled = !plan.eligible || row.structure_blocked;
+      apply.addEventListener("click", () =>
+        run(async () => {
+          if (
+            !confirm(
+              "将按已展示的标题和原始来源整理此待复核段落，并撤销受影响依赖的批准；全部新分段仍需人工复核。继续？",
+            )
+          )
+            return;
+          await candidateAction("organize", {
+            review_hash: currentDoc.assistance.review_hash,
+          });
+        }, apply),
+      );
+      panel.append(apply);
+      root.append(panel);
+    }
     root.append(
       element(
         "p",

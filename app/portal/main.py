@@ -282,6 +282,8 @@ def create_app(config=None, project_root=ROOT):
     @app.post("/api/documents/{document_id}/candidates/{candidate_id}/{action}")
     def candidate(document_id: str, candidate_id: str, action: str, body: ReviewAction):
         doc = store.document(document_id)
+        if body.baseline_id:
+            assistance.choose_baseline(doc, store.list_documents(), baseline_id=body.baseline_id)
         if action == "edit":
             payload = review.edit_candidate(doc["payload"], candidate_id, body.changes, body.block_ids, settings.data_root)
         elif action == "approve":
@@ -295,10 +297,18 @@ def create_app(config=None, project_root=ROOT):
             payload = review.split_candidate(doc["payload"], candidate_id, body.offset)
         elif action == "merge":
             payload = review.merge_candidates(doc["payload"], [candidate_id, *body.candidate_ids], settings.data_root)
+        elif action == "organize":
+            analysis = assistance.analyze(doc, settings.data_root, store.list_documents(), store.review_baseline(doc), body.baseline_id)
+            if body.review_hash != analysis["review_hash"]:
+                raise DomainError("revision_conflict", "结构建议已过期，请重新查看", status=409)
+            row = next((r for r in analysis["rows"] if r["candidate_id"] == candidate_id), None)
+            if not row or row["structure_blocked"]:
+                raise DomainError("review_required", "先处理来源、归档或页覆盖阻塞，再应用结构建议")
+            payload = review.reorganize_candidate(doc["payload"], candidate_id, row["structure_proposal"])
         else:
             raise DomainError("not_found", "未知复核操作", status=404)
         store.save_document(document_id, body.revision, payload, "pending_review", action, body.actor)
-        return document(document_id)
+        return document(document_id, body.baseline_id)
 
     @app.get("/api/jobs")
     def jobs():
@@ -362,6 +372,8 @@ def create_app(config=None, project_root=ROOT):
             raise DomainError("replacement_confirmation", "本次将替换同标准版本的条款集合，请确认预览", status=409)
         if not body.actor.strip() or not body.cases:
             raise DomainError("review_required", "请填写人工标注的检索问题、目标条款与复核人")
+        if not body.case_draft_id and any(str(row.get("case_id", "")).startswith("draft_") for row in body.cases):
+            raise DomainError("review_required", "自动问题草稿缺少来源与逐题确认，请重新预览并核对", "cases")
         if body.case_draft_id:
             draft = assistance.retrieval_drafts(candidate)
             if body.case_draft_id != draft["id"] or set(body.confirmed_case_ids) != {r.get("case_id") for r in body.cases}:
