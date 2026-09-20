@@ -648,6 +648,28 @@ footer {
 #review-assistance {
   margin-bottom: 24px;
 }
+.pdf-dropzone {
+  border: 2px dashed #b9cdc2;
+  border-radius: 8px;
+  padding: 15px 20px;
+  margin-bottom: 18px;
+}
+.pdf-dropzone.dragging {
+  background: #e1f1e7;
+  border-color: #1b6257;
+}
+.pdf-upload-row {
+  border-top: 1px solid #dce3de;
+  padding: 18px 0;
+  overflow-wrap: anywhere;
+}
+.pdf-upload-row pre {
+  max-height: 260px;
+  overflow: auto;
+}
+.pdf-upload-row progress {
+  width: 100%;
+}
 #candidate-assistance {
   margin: 16px 0;
 }

@@ -6,6 +6,7 @@
     <title>标准与设备 · 本地评估台</title>
     <link rel="stylesheet" href="/static/portal.css" />
     <script src="/static/portal.js" defer></script>
+    <script src="/static/portal-upload.js" defer></script>
     <script src="/static/portal-review.js" defer></script>
     <script src="/static/portal-setup.js" defer></script>
   </head>
@@ -51,14 +52,45 @@
           ><span>4 发布版本</span>
         </div>
         <form id="upload-form" class="card upload">
-          <label for="pdf-file">上传本地国家标准</label>
-          <p id="upload-limit">PDF · 最高 50 MiB / 300 页 · 每次一份</p>
-          <input
-            id="pdf-file"
-            type="file"
-            accept=".pdf,application/pdf"
-            required
-          /><button type="submit">上传并解析</button>
+          <div
+            id="pdf-dropzone"
+            class="pdf-dropzone"
+            role="region"
+            aria-label="PDF 批量上传区"
+          >
+            <label for="pdf-file">选择 PDF 文件（可多选）</label>
+            <p id="upload-limit">PDF · 每份最高 50 MiB / 300 页</p>
+            <input
+              id="pdf-file"
+              type="file"
+              accept=".pdf,application/pdf"
+              multiple
+            />
+            <p class="hint">
+              也可把多个 PDF
+              拖入此区域。按文件独立上传，一个失败不会阻止其余文件。
+            </p>
+          </div>
+          <div class="actions">
+            <button type="submit" id="start-pdf-uploads" disabled>
+              上传所选 PDF
+            </button>
+            <button
+              type="button"
+              id="clear-pdf-uploads"
+              class="secondary"
+              disabled
+            >
+              清除已完成的批次记录
+            </button>
+          </div>
+          <p id="pdf-batch-summary" role="status" class="hint">
+            尚未选择文件。
+          </p>
+          <p class="hint">
+            本页顺序上传，后台逐个解析。刷新或关闭页面会丢失尚未上传的文件选择；已接收任务继续处理，可从下方标准列表查看和重试。解析完成后仍须人工复核。
+          </p>
+          <div id="pdf-upload-queue" aria-label="按文件上传和解析状态"></div>
         </form>
         <div class="section-head">
           <h2>标准文件</h2>

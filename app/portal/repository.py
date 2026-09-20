@@ -45,6 +45,18 @@ class PortalRepository(Repository):
             self._enqueue(conn, "parse", {"document_id": uid}, "parse:" + uid)
         return self.document(uid), True
 
+    def parse_jobs(self, document_id=None):
+        query = "SELECT id,dedupe_key,status,stage,error_json,updated_at FROM jobs WHERE kind='parse'"
+        args = ()
+        if document_id is not None:
+            query += " AND dedupe_key=?"
+            args = ("parse:" + document_id,)
+        with self.connect() as conn:
+            rows = conn.execute(query, args).fetchall()
+        return {row["dedupe_key"][6:]: {"id": row["id"], "status": row["status"], "stage": row["stage"],
+                "error": json.loads(row["error_json"]), "updated_at": row["updated_at"]}
+                for row in rows if row["dedupe_key"].startswith("parse:")}
+
     def review_baseline(self, document):
         with self.connect() as conn:
             row = conn.execute("SELECT revision,payload_json FROM review_audit WHERE document_id=? AND revision<? AND action IN ('approve','approve_batch') ORDER BY revision DESC LIMIT 1",

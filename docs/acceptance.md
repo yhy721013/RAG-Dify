@@ -379,3 +379,10 @@
 
 - 85bd9fc干净HEAD导出130个源码文件，解压到tmp/assisted-delivery-85bd9fc，在该目录用工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：192 passed in 7.89s，2条既有弃用警告。包内无运行配置、data/test_files/tmp/虚拟环境，当前已知凭据匹配0；记录archive-check.json。
 - 最终源码包从包含此文档补记的干净HEAD重新导出，应用、测试和依赖与已复验的85bd9fc相同。门户、worker、证据服务和原HTTPS入口保留运行；真实新增批准/发布仍须用户在页面完成。
+
+## 批量PDF上传 — 队列与接口回归
+
+- 基线5f20a9c，分支codex/batch-pdf-upload。先阅读指南、现有上传/解析任务/重试/前端与测试，再实现原接口上的前端顺序上传队列。
+- 多选/拖放文件独立校验和上传，错误留在对应行；接收后追踪原解析任务，可单独重试上传或解析。重复文件由后端SHA去重，成功上传释放浏览器File引用；未上传选择在刷新时提示，后台记录保留在标准列表。解析任务摘要由同一GET /api/documents返回，不受GET /api/jobs最近100项上限限制。
+- 工作区.venv执行 python -X utf8 -m pytest -q：196 passed in 9.16s，2条既有弃用警告。新增4项覆盖API混合批次、原任务解析失败/重试/其余继续、106个文档/任务状态、Node纯JS队列和拖放事件回归；JS测试未启动浏览器或网络，Node可选，门户运行仍无Node依赖。本机安装Node，未跳过测试。
+- JS语法、Prettier与git diff --check通过。浏览器实际操作和真实标准批量上传在下一步验证。变更前2份文档、4份报告、2版知识状态哈希记录于data/portal/batch-upload-acceptance/before.json；未更改人工批准流程。

@@ -213,7 +213,7 @@ async function status() {
     (alive ? " 后台任务进程在线。" : " 后台任务进程未就绪，请运行启动脚本。");
   $("#readiness").classList.toggle("warning", missing.length > 0 || !alive);
   $("#upload-limit").textContent =
-    `PDF · 最高 ${Math.round(data.max_pdf_bytes / 1048576)} MiB / ${data.max_pdf_pages} 页 · 每次一份`;
+    `PDF · 每份最高 ${Math.round(data.max_pdf_bytes / 1048576)} MiB / ${data.max_pdf_pages} 页 · 可多选或拖入`;
   $("#assessment-version").textContent = data.current_snapshot
     ? "本次将使用已发布知识版本：" + data.current_snapshot
     : "请先完成标准复核并发布知识版本。";
@@ -245,10 +245,17 @@ async function status() {
   renderGuide();
 }
 async function refreshDocuments() {
-  const rows = await api("/api/documents"),
-    root = $("#documents");
+  let rows;
+  try {
+    rows = await api("/api/documents");
+  } catch (error) {
+    window.uploadUI?.pollFailed(error);
+    throw error;
+  }
+  const root = $("#documents");
   const signature = JSON.stringify(rows);
   documentsData = rows;
+  window.uploadUI?.updateDocuments(rows);
   renderGuide();
   if (signature === lastDocuments) return;
   lastDocuments = signature;
@@ -272,10 +279,12 @@ async function refreshDocuments() {
       element("strong", row.filename),
       element(
         "div",
-        `${row.page_count} 页 · ${row.approved_count} / ${row.candidate_count} 条已批准 · ${labels[row.status] || row.status}`,
+        `${row.page_count} 页 · ${row.approved_count} / ${row.candidate_count} 条已批准 · ${row.parse_job && row.parse_job.status !== "succeeded" ? (labels[row.parse_job.status] || row.parse_job.status) + "（解析）" : labels[row.status] || row.status}`,
         "meta",
       ),
     );
+    if (row.parse_job?.error?.message)
+      info.append(element("p", row.parse_job.error.message, "notice warning"));
     line.append(info);
     const button = element("button", "对照复核", "secondary");
     button.disabled = !row.candidate_count;
@@ -287,15 +296,33 @@ async function refreshDocuments() {
     task.addEventListener("click", () => {
       show("jobs");
       run(async () => {
+        if (row.parse_job?.id) {
+          await openTaskDiagnostics(row.parse_job.id);
+          return;
+        }
         await refreshJobs();
-        const row = [...document.querySelectorAll(".job-row")].find(
+        const jobElement = [...document.querySelectorAll(".job-row")].find(
           (n) => n.dataset.documentId === rowId,
         );
-        if (row) row.scrollIntoView({ behavior: "smooth" });
+        if (jobElement) jobElement.scrollIntoView({ behavior: "smooth" });
       });
     });
     const rowId = row.id;
     line.append(task);
+    if (
+      ["failed", "interrupted", "needs_attention"].includes(
+        row.parse_job?.status,
+      )
+    ) {
+      const retry = element("button", "重试此文件解析", "secondary");
+      retry.addEventListener("click", () =>
+        run(async () => {
+          await post(`/api/jobs/${row.parse_job.id}/retry`, {});
+          await refreshDocuments();
+        }, retry),
+      );
+      line.append(retry);
+    }
     root.append(line);
   }
 }
@@ -580,20 +607,6 @@ $("#candidate-select").addEventListener("change", () => {
     return;
   }
   fillCandidate();
-});
-$("#upload-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  run(async () => {
-    const body = new FormData();
-    body.append("file", $("#pdf-file").files[0]);
-    const result = await api("/api/documents", { method: "POST", body });
-    message(
-      result.reused
-        ? "文件已存在，已复用已有解析任务与复核记录。"
-        : "上传成功，后台将自动解析。可在任务页查看进度。",
-    );
-    await refresh();
-  }, event.submitter);
 });
 $("#metadata-form").addEventListener("submit", (event) => {
   event.preventDefault();

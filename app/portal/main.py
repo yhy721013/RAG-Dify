@@ -174,9 +174,12 @@ def create_app(config=None, project_root=ROOT):
 
     @app.get("/api/documents")
     def documents():
-        return [{key: value for key, value in row.items() if key != "payload"} | {
+        parsing = store.parse_jobs()
+        return [scrub({key: value for key, value in row.items() if key != "payload"} | {
             "approved_count": sum(item["record"]["content_review_status"] == "approved" for item in row["payload"].get("candidates", [])),
-            "candidate_count": len(row["payload"].get("candidates", []))} for row in store.list_documents()]
+            "candidate_count": len(row["payload"].get("candidates", [])),
+            "full_document_covered": row["payload"].get("normalized", {}).get("full_document_covered"),
+            "parse_job": parsing.get(row["id"])}, settings.secret_values()) for row in store.list_documents()]
 
     @app.post("/api/documents")
     async def upload_pdf(file: UploadFile = File(...)):
@@ -197,7 +200,8 @@ def create_app(config=None, project_root=ROOT):
                 archived = local_path(settings.data_root, doc["source_path"])
                 if not archived.is_file() or file_sha256(archived) != checksum:
                     raise DomainError("source_archive_changed", "已有文件的归档不再匹配，未沿用批准记录", status=409)
-            return {"document_id": doc["id"], "reused": not created, "status": doc["status"], "bytes": size, "pages": pages}
+            return scrub({"document_id": doc["id"], "reused": not created, "status": doc["status"], "bytes": size, "pages": pages,
+                          "parse_job": store.parse_jobs(doc["id"]).get(doc["id"])}, settings.secret_values())
         finally:
             path.unlink(missing_ok=True)
 
