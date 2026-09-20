@@ -17,7 +17,11 @@ from app.errors import DomainError
 from app.portal import review
 from app.portal.files import save_upload, validate_image, validate_pdf
 from app.portal.repository import PortalRepository
-from app.portal.settings import PortalSettings
+from app.portal.settings import PortalSettings, bootstrap_settings
+from app.portal.setup import SetupManager, fingerprint
+from app.portal.setup_api import install_setup_routes, latest_diagnostics, diagnostic_task
+from app.portal.support import diagnostic_zip, task_diagnostics
+from app.safe_diagnostics import public_error, scrub
 from app.repository import Repository, digest, now
 from app.schemas import StrictModel
 from app.settings import ROOT
@@ -48,33 +52,47 @@ def public_job(job):
     return {key: value for key, value in job.items() if key not in {"payload", "dedupe_key"}}
 
 
-def create_app(config=None):
-    settings = config or PortalSettings.from_env()
+def create_app(config=None, project_root=ROOT):
+    settings, configuration_error = (config, "") if config else bootstrap_settings()
     store = PortalRepository(settings.db_path)
     evidence = Repository(settings.evidence_settings().db_path)
     csrf = secrets.token_urlsafe(32)
     render_lock = threading.Lock()
     templates = Environment(loader=FileSystemLoader(ROOT / "templates"), autoescape=select_autoescape())
+    manager = SetupManager(settings, store, project_root)
+    error_lock = threading.Lock()
 
     @asynccontextmanager
     async def lifespan(app):
         store.initialize()
         evidence.initialize()
+        store.interrupt_diagnostics()
         yield
 
     app = FastAPI(title="本地标准复核与设备评估", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.store, app.state.settings = store, settings
+    app.state.store, app.state.settings, app.state.setup = store, settings, manager
+    install_setup_routes(app, manager)
 
     @app.middleware("http")
     async def local_boundary(request, call_next):
+        nonlocal settings, configuration_error
+        request.state.trace_id = "req_" + uuid4().hex
+        if config is None and manager.apply_path.exists():
+            apply_state = json.loads(manager.apply_path.read_text(encoding="utf-8"))
+            if apply_state.get("status") == "succeeded" and apply_state.get("fingerprint") != fingerprint(settings):
+                candidate, problem = bootstrap_settings()
+                if not problem and fingerprint(candidate) == apply_state["fingerprint"]:
+                    settings, configuration_error = candidate, ""
+                    manager.config = settings
+                    app.state.settings = settings
         allowed = {"127.0.0.1:8001", "localhost:8001"}
         peer = request.client.host if request.client else ""
         if request.headers.get("host") not in allowed or (peer not in {"127.0.0.1", "::1"} and settings.app_env != "test"):
             return JSONResponse({"error": {"code": "local_only", "message": "测试台仅供本机使用"}}, status_code=403)
         if request.method not in {"GET", "HEAD"}:
             if (request.headers.get("origin") != settings.origin or
-                not secrets.compare_digest(request.headers.get("x-csrf-token", ""), csrf) or
-                not secrets.compare_digest(request.cookies.get("portal_session", ""), csrf)):
+                not secrets.compare_digest(request.headers.get("x-csrf-token", "").encode(), csrf.encode()) or
+                not secrets.compare_digest(request.cookies.get("portal_session", "").encode(), csrf.encode())):
                 return JSONResponse({"error": {"code": "csrf_rejected", "message": "页面会话已过期，请刷新"}}, status_code=403)
             try:
                 length = int(request.headers.get("content-length", "-1"))
@@ -83,24 +101,52 @@ def create_app(config=None):
             # 浏览器上传有 Content-Length；拒绝无限长流，限制解析 multipart 前的体积。
             if length < 0 or length > max(settings.max_pdf_bytes, 20 * 1024 * 1024) + 1024 * 1024:
                 return JSONResponse({"error": {"code": "file_too_large", "message": "请求过大或缺少长度"}}, status_code=413)
+            if not request.url.path.startswith(("/api/setup", "/api/diagnostics")):
+                if configuration_error or store.state("maintenance"):
+                    return JSONResponse({"error": {"code": "configuration_applying", "message": configuration_error or "正在应用配置，请等待服务恢复"}}, status_code=409)
         response = await call_next(request)
         response.headers.update({"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
             "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; frame-src 'self'; object-src 'self'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"})
+        response.headers["X-Request-ID"] = request.state.trace_id
         return response
+
+    def error_response(request, error, status_code):
+        detail = public_error(error, settings.secret_values(), stage=request.url.path,
+                              request_id=getattr(request.state, "trace_id", ""))
+        with error_lock:
+            log = settings.data_root / "logs/portal-errors.jsonl"
+            try:
+                log.parent.mkdir(parents=True, exist_ok=True)
+                with log.open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps({"created_at": now(), **detail}, ensure_ascii=False) + "\n")
+            except OSError:
+                detail["logging_unavailable"] = True
+        return JSONResponse({"error": detail}, status_code=status_code)
+
+    def require_diagnostic_gate(stage):
+        result = latest_diagnostics(manager)
+        if result and not result["stale"] and not result["gates"].get(stage, True):
+            blockers = [{"id": row["id"], "title": row["title"], "message": row["message"]}
+                        for row in result["checks"] if row["status"] == "fail" and stage in row["gates"]]
+            raise DomainError("environment_not_ready", "请先修复当前配置的诊断阻塞项并重新检查", status=409, details={"blockers": blockers})
 
     @app.exception_handler(DomainError)
     async def domain_error(request, error):
-        return JSONResponse({"error": error.detail()}, status_code=error.status)
+        return error_response(request, error, error.status)
 
     @app.exception_handler(RequestValidationError)
     @app.exception_handler(ValidationError)
     async def validation_error(request, error):
-        return JSONResponse({"error": {"code": "input_error", "message": "输入格式不正确",
-            "fields": [{"field": ".".join(map(str, row["loc"])), "message": row["msg"]} for row in error.errors()]}}, status_code=422)
+        fields = [{"field": ".".join(map(str, row["loc"])), "message": row["msg"]} for row in error.errors()]
+        return error_response(request, DomainError("input_error", "输入格式不正确，请修正标出的字段", details={"fields": fields}), 422)
 
     @app.exception_handler(sqlite3.Error)
     async def database_error(request, error):
-        return JSONResponse({"error": {"code": "infrastructure_error", "message": "任务库暂不可用"}}, status_code=503)
+        return error_response(request, error, 503)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request, error):
+        return error_response(request, error, 500)
 
     app.mount("/static", StaticFiles(directory=ROOT / "app/static"), name="static")
 
@@ -113,7 +159,11 @@ def create_app(config=None):
         response = JSONResponse({"configured": settings.readiness(), "csrf_token": csrf,
             "current_snapshot": store.state("current_snapshot"), "worker_heartbeat": store.state("worker_heartbeat"),
             "max_pdf_bytes": settings.max_pdf_bytes, "max_pdf_pages": settings.max_pdf_pages,
-            "equipment_type": json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["equipment_type"]})
+            "equipment_type": json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["equipment_type"],
+            "checklist": json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["checks"],
+            "configuration_error": configuration_error, "configuration_fingerprint": fingerprint(settings),
+            "portal_origin": settings.origin, "diagnostics": latest_diagnostics(manager),
+            "maintenance": bool(store.state("maintenance"))})
         response.set_cookie("portal_session", csrf, httponly=True, samesite="strict", path="/")
         return response
 
@@ -145,6 +195,22 @@ def create_app(config=None):
         doc = store.document(document_id)
         refs = {ref for page in doc["payload"].get("normalized", {}).get("pages", []) for block in page["blocks"] for ref in block["asset_refs"]}
         return {**doc, "asset_links": {ref: f"/api/documents/{document_id}/assets/{digest(ref)}" for ref in refs}}
+
+    @app.get("/api/review/options")
+    def review_options(document_id: str):
+        store.document(document_id)
+        rows, seen = [], set()
+        docs = sorted(store.list_documents(), key=lambda d: d["id"] != document_id)
+        for doc in docs:
+            for item in doc["payload"].get("candidates", []):
+                record = item["record"]
+                uid = record.get("clause_uid")
+                if uid and uid not in seen:
+                    rows.append({"clause_uid": uid, "clause_no": record["clause_no"], "standard_code": record["standard_code"],
+                        "text": record["text_verbatim"][:180], "status": record["content_review_status"],
+                        "document_id": doc["id"], "candidate_id": item["id"], "filename": doc["filename"]})
+                    seen.add(uid)
+        return rows
 
     @app.get("/api/documents/{document_id}/pdf")
     def pdf(document_id: str):
@@ -207,7 +273,18 @@ def create_app(config=None):
 
     @app.get("/api/jobs")
     def jobs():
-        return [public_job(row) for row in store.jobs()]
+        rows = []
+        for job in store.jobs():
+            row = public_job(job)
+            if job["payload"].get("document_id"):
+                doc = store.document(job["payload"]["document_id"])
+                row["document_id"], row["title"] = doc["id"], doc["filename"]
+            elif job["kind"] == "assessment":
+                row["title"] = f'{len(job["payload"].get("images", []))} 张设备图片'
+            else:
+                row["title"] = job["payload"].get("snapshot_id", "")
+            rows.append(scrub(row, settings.secret_values()))
+        return rows
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str):
@@ -215,7 +292,19 @@ def create_app(config=None):
 
     @app.post("/api/jobs/{job_id}/retry")
     def retry(job_id: str):
+        if store.job(job_id)["kind"] == "diagnostics":
+            raise DomainError("diagnostic_retry", "请从首次配置重新发起诊断，使用当前配置")
         return public_job(store.retry(job_id))
+
+    @app.get("/api/jobs/{job_id}/diagnostics")
+    def job_diagnostics(job_id: str):
+        return task_diagnostics(store.job(job_id), store, settings)
+
+    @app.get("/api/jobs/{job_id}/diagnostics.zip")
+    def download_diagnostics(job_id: str):
+        data = task_diagnostics(store.job(job_id), store, settings)
+        return Response(diagnostic_zip(data), media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="{store.job(job_id)["id"]}-diagnostics.zip"'})
 
     @app.get("/api/releases")
     def releases():
@@ -228,7 +317,10 @@ def create_app(config=None):
     @app.post("/api/releases")
     def release(body: ReleaseAction):
         settings.evidence_settings().require_dify()
+        require_diagnostic_gate("publish")
         candidate = review.release_preview(store, evidence, body.document_ids)
+        if candidate.get("blockers"):
+            raise DomainError("review_required", "请先修复发布预检中的问题", details={"blockers": candidate["blockers"]})
         if candidate["preview_hash"] != body.preview_hash:
             raise DomainError("revision_conflict", "预览已过期，请重新预览", status=409)
         if candidate["unchanged"]:
@@ -240,6 +332,10 @@ def create_app(config=None):
         snapshot_id = "portal_" + digest([body.preview_hash, body.cases, body.actor])[:24]
         cases = [RetrievalCase.model_validate({**row, "snapshot_id": snapshot_id, "annotated_by": body.actor,
                     "annotated_at": now()}).model_dump() for row in body.cases]
+        allowed = {row["clause_uid"] for row in candidate["records"]}
+        if (not any(row["answerable"] for row in cases) or len({row["case_id"] for row in cases}) != len(cases)
+            or any(not row["query"].strip() or not set(row["expected_clause_uids"]) <= allowed for row in cases)):
+            raise DomainError("evaluation_input_error", "至少填写一道可回答题；目标条款须属于本次批准范围，问题 ID 不得重复", "cases")
         # 日期固定在首次入队；重复提交复用相同知识版本，不生成第二次远程创建。
         existing = next((row for row in store.jobs() if row["kind"] == "publish" and row["payload"].get("snapshot_id") == snapshot_id), None)
         if existing:
@@ -252,6 +348,7 @@ def create_app(config=None):
                          operating_state: str = Form("未知"), work_context: str = Form(...),
                          same_equipment_confirmed: bool = Form(False), submission_id: str = Form(...)):
         settings.require_assessment()
+        require_diagnostic_gate("assess")
         snapshot = store.state("current_snapshot")
         if not snapshot or not evidence.snapshot_active(snapshot):
             raise DomainError("snapshot_not_allowed", "请先发布一个通过检索自检的知识版本", status=409)
@@ -282,6 +379,7 @@ def create_app(config=None):
         payload = {"snapshot_id": snapshot, "images": saved, "inputs": {"equipment_type": checklist["equipment_type"],
             "equipment_description": equipment_description, "operating_state": operating_state,
             "work_context": work_context, "same_equipment_confirmed": True}}
+        payload["configuration_fingerprint"] = fingerprint(settings)
         return public_job(store.enqueue("assessment", payload, "assessment:" + submission_id))
 
     def saved_report(job_id):

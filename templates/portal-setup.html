@@ -1,0 +1,211 @@
+<section id="setup-view" class="view" hidden>
+  <div class="intro">
+    <h2>按步骤连接你的测试环境</h2>
+    <p>
+      一次完成 Dify
+      准备，之后在测试台上传、复核、更新知识库和生成报告。密钥仅由本机后端保存。
+    </p>
+  </div>
+  <div class="setup-steps" role="tablist" aria-label="首次配置步骤">
+    <button type="button" data-setup-step="environment">1 本机环境</button>
+    <button type="button" data-setup-step="knowledge">2 专用知识库</button>
+    <button type="button" data-setup-step="https">3 HTTPS 入口</button>
+    <button type="button" data-setup-step="workflow">4 Dify 工作流</button>
+    <button type="button" data-setup-step="checks">5 检查与首测</button>
+  </div>
+  <div id="setup-state" class="notice"></div>
+  <form id="setup-form" autocomplete="off" class="card">
+    <section data-setup-group="environment">
+      <h2>本机环境</h2>
+      <p>
+        Windows、PowerShell 7、Python 3.12。证据服务与解析器使用不同的虚拟环境。
+      </p>
+      <details>
+        <summary>尚未安装环境时</summary>
+        <p>
+          在项目目录的 PowerShell 7
+          执行下方命令，然后返回页面运行诊断。首次安装解析模型可能需要较长时间。
+        </p>
+        <pre>
+pwsh -File deploy/init-portal.ps1 -InstallMinerU
+pwsh -File deploy/start-portal.ps1</pre
+        >
+        <p>
+          端口被其他程序占用时，不会自动停止该程序；启动诊断位于
+          data/portal-runtime。
+        </p>
+      </details>
+      <p id="setup-data-root" class="hint"></p>
+      <div id="setup-environment-fields" class="form-grid"></div>
+      <button type="button" id="show-service-logs" class="secondary">
+        查看本机服务日志
+      </button>
+      <pre id="service-logs" class="log-box" hidden></pre>
+    </section>
+    <section data-setup-group="knowledge" hidden>
+      <h2>创建一个专用知识库</h2>
+      <ol>
+        <li>
+          打开
+          <a
+            href="https://cloud.dify.ai/datasets"
+            target="_blank"
+            rel="noopener"
+            >Dify 知识库</a
+          >，创建空白专用库。
+        </li>
+        <li>
+          创建只授权这个库的 Knowledge API 密钥。复制知识库页面网址或
+          ID，填写下方字段。
+        </li>
+        <li>
+          保存并应用配置后，点击“初始化空库”，设置高质量混合检索、嵌入模型和版本元数据。已有资料的库不会被此按钮修改。
+        </li>
+      </ol>
+      <div id="setup-knowledge-fields" class="form-grid"></div>
+      <button type="button" id="initialize-dataset" class="secondary">
+        初始化空白专用知识库
+      </button>
+    </section>
+    <section data-setup-group="https" hidden>
+      <h2>让 Dify 访问证据服务</h2>
+      <p>
+        仅把证据服务 127.0.0.1:8002 接到 HTTPS。上传和复核页面 8001
+        始终留在本机。
+      </p>
+      <div id="setup-https-fields" class="form-grid"></div>
+      <button type="button" id="generate-evidence-token" class="secondary">
+        生成新的证据密钥
+      </button>
+      <p class="hint">
+        新密钥请在保存前复制到 Dify 的 EVIDENCE_API_TOKEN
+        Secret。已保存的值不会回显；更换后必须同步 Dify。
+      </p>
+      <div class="tunnel-card">
+        <h3>临时 Quick Tunnel</h3>
+        <p id="tunnel-state">正在读取状态…</p>
+        <div class="actions">
+          <button type="button" id="tunnel-start">启动本实例隧道</button
+          ><button type="button" id="tunnel-check" class="secondary">
+            检查状态</button
+          ><button type="button" id="tunnel-stop" class="secondary">
+            停止本实例隧道</button
+          ><button type="button" id="tunnel-use-url" class="secondary">
+            填入新地址
+          </button>
+        </div>
+        <p class="hint">
+          也可直接填写自有 HTTPS。隧道地址变化后，须更新 Dify
+          环境变量并发布，再重新验证。
+        </p>
+        <details>
+          <summary>安装指定版本工具</summary>
+          <p>
+            下载
+            <a id="cloudflared-download" target="_blank" rel="noopener"
+              >官方 cloudflared 2026.9.1（Windows x64）</a
+            >，按官方许可使用，保存到本机环境步骤指定的位置。启动前核对项目固定
+            SHA-256，不自动升级系统工具。
+          </p>
+        </details>
+      </div>
+    </section>
+    <section data-setup-group="workflow" hidden>
+      <h2>绑定保持原有结构的 Workflow</h2>
+      <ol>
+        <li>填写视觉模型提供方和模型 ID；模型凭据只在 Dify 管理。</li>
+        <li>
+          下载当前环境的无密钥 DSL，导入 Dify 专用
+          Workflow。已有应用先备份草稿。
+        </li>
+        <li>
+          核对知识库绑定、两个节点的图片输入及模型设置；绑定 HTTPS 和证据
+          Secret。
+        </li>
+        <li>
+          发布服务 API，并关闭公开 Web App；把该应用的 Workflow API
+          密钥填到下方。它与 Knowledge 密钥不同。
+        </li>
+      </ol>
+      <div id="setup-workflow-fields" class="form-grid"></div>
+      <div class="actions">
+        <a
+          id="download-configured-workflow"
+          href="/api/setup/workflow.yml"
+          class="button-link"
+          >下载当前已应用配置的 DSL</a
+        ><a id="download-draft-workflow" hidden class="button-link"
+          >下载草稿配置的 DSL</a
+        ><a
+          id="open-workflow-console"
+          href="https://cloud.dify.ai/apps"
+          target="_blank"
+          rel="noopener"
+          >打开 Dify 工作室</a
+        >
+      </div>
+      <details>
+        <summary>Dify 发布前无法关闭 Web App 时</summary>
+        <p>
+          先保持 Secret 为空、知识版本尚未发布，发布后立即停用 Web App，再绑定
+          Secret 并发布更新。每次更新都复查访问开关。
+        </p>
+      </details>
+      <fieldset id="setup-confirmations">
+        <legend>在 Dify 完成后手动确认（不冒充自动验证）</legend>
+        <label class="check"
+          ><input
+            type="checkbox"
+            value="dataset_created"
+          />已建立专用知识库</label
+        ><label class="check"
+          ><input
+            type="checkbox"
+            value="workflow_imported"
+          />已导入正确配置与模型绑定</label
+        ><label class="check"
+          ><input type="checkbox" value="secret_bound" />已绑定 HTTPS 地址与证据
+          Secret</label
+        ><label class="check"
+          ><input type="checkbox" value="workflow_published" />已发布 Workflow
+          服务 API</label
+        ><label class="check"
+          ><input type="checkbox" value="webapp_disabled" />已停用公开 Web
+          App</label
+        >
+      </fieldset>
+      <button type="button" id="save-confirmations" class="secondary">
+        记录这些人工确认
+      </button>
+    </section>
+    <div id="setup-save-actions" class="actions">
+      <button type="submit">保存配置草稿</button
+      ><button type="button" id="apply-setup" class="secondary">
+        应用草稿并重启后台服务</button
+      ><button type="button" id="reload-setup" class="secondary">
+        重新载入配置
+      </button>
+    </div>
+    <p class="hint">
+      空密码框保留已有密钥。配置只在任务空闲时应用；页面保留运行，证据服务与
+      worker 重启。已发布资料的目录不能直接换库。
+    </p>
+  </form>
+  <section data-setup-group="checks" class="card" hidden>
+    <h2>真实诊断与首次测试</h2>
+    <p>
+      诊断只执行本机检查和只读 Service API 请求，不调用模型。Dify
+      到证据服务的实际调用及模型可用性，需要首份真实报告验证。
+    </p>
+    <div class="actions">
+      <button id="diagnose-active" type="button">检查已应用配置</button
+      ><button id="diagnose-draft" type="button" class="secondary">
+        检查草稿配置</button
+      ><button type="button" id="go-first-upload" class="secondary">
+        开始上传第一份标准
+      </button>
+    </div>
+    <p id="diagnostic-progress" role="status"></p>
+    <div id="diagnostic-results"></div>
+  </section>
+</section>

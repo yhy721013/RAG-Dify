@@ -6,12 +6,14 @@
     <title>标准与设备 · 本地评估台</title>
     <link rel="stylesheet" href="/static/portal.css" />
     <script src="/static/portal.js" defer></script>
+    <script src="/static/portal-setup.js" defer></script>
   </head>
   <body>
     <aside class="rail">
       <div class="brand">M<span>机械安全 · RAG</span></div>
       <div class="local">● 本机开发测试</div>
       <nav>
+        <button data-view="setup">00　首次配置与诊断</button>
         <button data-view="library" class="active">01　标准资料库</button
         ><button data-view="assessment">02　设备评估</button
         ><button data-view="jobs">03　任务与报告</button>
@@ -28,6 +30,14 @@
       </header>
       <div id="message" role="status" hidden></div>
       <div id="readiness" class="notice">正在读取本机配置…</div>
+      <details id="first-test-guide" class="card onboarding" open>
+        <summary>首次测试：从标准到报告</summary>
+        <div id="guide-steps" class="guide-grid"></div>
+        <p class="hint">
+          首次可只复核少量清晰条款及其必要上下文。检索命中率用于排错，不代表设备安全评估准确率。
+        </p>
+      </details>
+      {% include "portal-setup.html" %}
       <section id="library-view" class="view">
         <div class="intro">
           <h2>从标准原文，到可追溯的依据</h2>
@@ -59,17 +69,20 @@
         <section id="release-panel" class="card" hidden>
           <h2>发布新的累积版本</h2>
           <pre id="release-summary"></pre>
+          <div id="release-blockers"></div>
+          <p>
+            为本次批准范围填写检索问题，再勾选预期命中的条款。至少一道可回答题；可另外添加无答案问题。
+          </p>
+          <div id="retrieval-case-editor"></div>
+          <button type="button" id="add-retrieval-case" class="secondary">
+            添加检索问题
+          </button>
           <details>
-            <summary>可用目标条款 ID（标注检索问题时使用）</summary>
+            <summary>开发者详情：条款身份与自检 JSON</summary>
             <pre id="release-clauses"></pre>
+            <textarea id="release-cases" rows="7" readonly></textarea>
           </details>
-          <label
-            >检索自检问题（JSON 数组；必须由复核人标注）<textarea
-              id="release-cases"
-              rows="7"
-              placeholder='[{"case_id":"q1","query":"人工填写的检索问题","expected_clause_uids":["cl_…"],"answerable":true}]'
-            ></textarea></label
-          ><label>复核人<input id="release-actor" maxlength="100" /></label
+          <label>复核人<input id="release-actor" maxlength="100" /></label
           ><label class="check"
             ><input
               id="confirm-replace"
@@ -115,7 +128,23 @@
                 ><button>保存标准信息</button>
               </form>
             </details>
+            <div class="form-grid">
+              <label
+                >筛选候选<select id="candidate-filter">
+                  <option value="all">全部候选</option>
+                  <option value="pending">待复核</option>
+                  <option value="approved">已批准</option>
+                  <option value="boundary">边界待确认</option>
+                  <option value="assets">图表或资产问题</option>
+                </select></label
+              ><label
+                >查找条款<input
+                  id="candidate-search"
+                  placeholder="条款号或原文关键词"
+              /></label>
+            </div>
             <label>候选条款<select id="candidate-select"></select></label>
+            <p id="candidate-count" class="hint"></p>
             <div id="candidate-info" class="notice"></div>
             <form id="candidate-form">
               <label>条款号<input id="clause-no" required /></label
@@ -128,26 +157,39 @@
                   id="clause-text"
                   rows="14"
                   required
-                ></textarea></label
-              ><label
-                >来源块 ID（逗号分隔）<textarea
-                  id="source-blocks"
-                  rows="2"
-                  required
                 ></textarea>
               </label>
-              <details>
-                <summary>展开原始来源块与图表</summary>
+              <details open>
+                <summary>原始来源与图表（勾选属于本条款的内容）</summary>
+                <label class="check"
+                  ><input type="checkbox" id="source-show-all" />显示本 PDF
+                  的全部来源块以调整范围</label
+                >
                 <div id="original-blocks"></div>
               </details>
               <label
-                >必要上下文条款 UID（逗号分隔）<textarea
-                  id="context-uids"
-                  rows="2"
-                ></textarea></label
-              ><label
+                >必要上下文（父条款、前提或相关说明）<input
+                  id="context-search"
+                  placeholder="按条款号或原文查找"
+              /></label>
+              <div id="context-picker" class="option-list"></div>
+              <details>
+                <summary>开发者详情：来源与条款身份</summary>
+                <label
+                  >来源块 ID<textarea
+                    id="source-blocks"
+                    rows="2"
+                  ></textarea></label
+                ><label
+                  >上下文 UID<textarea id="context-uids" rows="2"></textarea>
+                </label>
+              </details>
+              <label
                 >复核备注<textarea id="review-notes" rows="2"></textarea></label
-              ><button>保存修改（重新进入待复核）</button>
+              ><button>保存修改（重新进入待复核）</button
+              ><button id="save-next-clause" type="button" class="secondary">
+                保存并查看下一条
+              </button>
             </form>
             <div class="actions">
               <button id="split-clause" class="secondary">从光标处拆分</button
@@ -204,6 +246,18 @@
               required
           /></label>
           <p class="hint">1～4 张不同角度 JPEG / PNG，每张不超过 5 MiB。</p>
+          <div id="image-preview" class="image-preview"></div>
+          <details>
+            <summary>怎样准备测试图片与工况</summary>
+            <p>
+              使用同一台普通卧式金属车床的整机图和需要检查的防护细节。照片应清晰，不同设备分开提交；不能从照片确认的尺寸、联锁和运行状态请填写未知。
+            </p>
+            <p>
+              工况示例格式：设备用途；运行/停机状态；人员在何处接近；作业或维护方式；哪些信息未知。示例格式不代表已确认的现场事实。
+            </p>
+            <div id="assessment-checklist"></div>
+          </details>
+          <p id="assessment-prerequisites" class="notice"></p>
           <label
             >设备用途与结构说明<textarea
               name="equipment_description"
@@ -245,6 +299,13 @@
           </p>
         </div>
         <div id="jobs" class="card empty"></div>
+        <section id="task-diagnostics-panel" class="card" hidden>
+          <div class="section-head">
+            <h2>任务诊断</h2>
+            <a id="download-task-diagnostics">下载脱敏诊断包</a>
+          </div>
+          <div id="task-diagnostics-content"></div>
+        </section>
         <article id="report-panel" class="card" hidden>
           <div class="section-head">
             <h2>待专业人员复核</h2>

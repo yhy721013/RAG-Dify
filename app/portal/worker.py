@@ -15,6 +15,7 @@ from app.portal.repository import PortalRepository
 from app.portal.settings import PortalSettings
 from app.repository import Repository, json_text
 from app.settings import ROOT
+from app.safe_diagnostics import public_error
 from evals.evaluate_retrieval import evaluate
 from ingestion.build_clauses import candidates
 from ingestion.import_reviewed import import_reviewed
@@ -64,7 +65,7 @@ def run_parser(command, log_path, timeout, tick):
                     raise DomainError("parse_timeout", "MinerU 解析超时，原文件和日志已保留")
                 time.sleep(2)
             if process.returncode:
-                raise DomainError("parse_error", "MinerU 未成功完成，请查看此任务的 parser.log")
+                raise DomainError("parse_error", "MinerU 未成功完成，展开任务诊断查看解析日志", details={"returncode": process.returncode})
         finally:
             if process.poll() is None:
                 if os.name == "nt":
@@ -148,13 +149,31 @@ def execute(job, store, config):
         elif job["kind"] == "assessment":
             from app.portal.assessment import assess
             result = assess(job, store, config)
+        elif job["kind"] == "configure_dataset":
+            from app.portal.setup import fingerprint
+            if job["payload"]["fingerprint"] != fingerprint(config):
+                raise DomainError("configuration_changed", "配置已变化，请从向导重新提交空库初始化")
+            store.progress(job["id"], "configuring_dataset")
+            with DifyClient(config.evidence_settings()) as client:
+                detail = client.request("GET", client.path())
+                if detail.get("document_count") != 0:
+                    raise DomainError("dataset_not_empty", "此功能只配置空白专用知识库，未修改现有数据")
+                embedding = {"embedding_model": config.embedding_model, "embedding_model_provider": config.embedding_provider}
+                client.request("PATCH", client.path(), json={"indexing_technique": "high_quality", **embedding,
+                    "retrieval_model": client.retrieval_model(embedding)})
+                client.dataset()
+                client.snapshot_metadata()
+                result = {"dataset_id": config.dataset_id, "configured": True}
+        elif job["kind"] == "tunnel":
+            from app.portal.tunnel import operate
+            store.progress(job["id"], "tunnel")
+            result = operate(config, job["payload"]["action"], store.heartbeat)
         else:
             raise DomainError("unknown_job", "未知任务类型")
         store.progress(job["id"], "complete", result, status="succeeded")
     except Exception as error:
-        detail = error.detail() if isinstance(error, DomainError) else {"code": "infrastructure_error",
-            "message": "后台处理失败（" + type(error).__name__ + "）；原始文件与阶段记录已保留"}
         current = store.job(job["id"])
+        detail = public_error(error, config.secret_values(), stage=current["stage"], request_id=job["id"])
         store.progress(job["id"], current["stage"], status="needs_attention" if detail["code"] in {
             "ambiguous_run", "ambiguous_creation", "sync_locked"} else "failed", error=detail)
         if job["kind"] == "parse":
@@ -170,7 +189,7 @@ def main():
     store = PortalRepository(config.db_path)
     store.initialize()
     with worker_lock(config.data_root / "worker.lock"):
-        store.recover()
+        store.recover(include_diagnostics=False)
         stop_heartbeat = threading.Event()
         def heartbeat():
             while not stop_heartbeat.wait(5):

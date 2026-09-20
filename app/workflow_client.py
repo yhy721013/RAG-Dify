@@ -7,6 +7,7 @@ import httpx
 
 from app.dify_client import contract_error
 from app.errors import DomainError
+from app.safe_diagnostics import scrub, upstream_details
 
 
 class WorkflowClient:
@@ -16,6 +17,8 @@ class WorkflowClient:
             raise DomainError("configuration_error", "Workflow Service API 地址无效")
         self.client = httpx.Client(base_url=base_url.rstrip("/") + "/", headers={"Authorization": "Bearer " + api_key},
             timeout=httpx.Timeout(90, connect=15), transport=transport, follow_redirects=False)
+        self.api_key = api_key
+        self.on_event = None
 
     def __enter__(self):
         return self
@@ -29,7 +32,8 @@ class WorkflowClient:
         except httpx.HTTPError as error:
             raise DomainError("workflow_network_error", "Dify Workflow 网络调用失败；可查询已有运行状态", status=502) from error
         if not response.is_success:
-            raise DomainError("workflow_http_error", f"Workflow API 返回 HTTP {response.status_code}", status=502)
+            raise DomainError("workflow_http_error", f"Workflow API 返回 HTTP {response.status_code}", status=502,
+                              details=upstream_details(response, [self.api_key]))
         try:
             data = response.json()
             if not isinstance(data, dict):
@@ -50,8 +54,10 @@ class WorkflowClient:
         try:
             with self.client.stream("POST", "workflows/run", json={"inputs": inputs, "user": user, "response_mode": "streaming"}) as response:
                 if not response.is_success:
+                    response.read()
                     code = "workflow_rejected" if response.status_code in {400, 401, 403, 404, 422, 429} else "ambiguous_run"
-                    raise DomainError(code, f"Workflow API 返回 HTTP {response.status_code}，未获得完成结果", status=502)
+                    raise DomainError(code, f"Workflow API 返回 HTTP {response.status_code}，未获得完成结果", status=502,
+                                      details=upstream_details(response, [self.api_key]))
                 if "text/event-stream" not in response.headers.get("content-type", ""):
                     raise contract_error("workflow.content_type")
                 data_lines = []
@@ -65,13 +71,17 @@ class WorkflowClient:
                             raise contract_error("workflow.sse") from error
                         data_lines = []
                         kind, data = event.get("event"), event.get("data") or {}
+                        if self.on_event and kind in {"node_started", "node_finished", "node_retry", "workflow_started", "workflow_finished", "error"}:
+                            self.on_event(scrub({"event": kind, **{key: data.get(key) for key in
+                                ("id", "node_id", "node_type", "title", "index", "iteration_id", "status", "elapsed_time", "error") if data.get(key) is not None}}, [self.api_key]))
                         run_id = event.get("workflow_run_id") or (data.get("id") if kind in {"workflow_started", "workflow_finished"} else None)
                         if run_id:
                             started({"run_id": run_id, "task_id": event.get("task_id"), "workflow_id": data.get("workflow_id")})
                         if kind == "workflow_finished":
                             return data
                         if kind == "error":
-                            raise DomainError("workflow_failed", "工作流返回错误，详细节点原因请在 Dify 运行记录中核对", status=502)
+                            raise DomainError("workflow_failed", "工作流返回错误", status=502,
+                                details=scrub({"upstream_message": event.get("message") or data.get("error"), "upstream_code": event.get("code")}, [self.api_key]))
         except httpx.HTTPError as error:
             raise DomainError("workflow_disconnected", "工作流连接中断，需要按已保存运行 ID 对账", status=502) from error
         raise DomainError("workflow_disconnected", "工作流流结束但未收到完成事件", status=502)

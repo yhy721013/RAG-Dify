@@ -37,6 +37,11 @@ def main():
                 "retrieval_model": client.retrieval_model(embedding)})
             client.dataset()
             client.snapshot_metadata()
+    if args.command == "doctor":
+        from app.portal.diagnostics import run_diagnostics
+        store = PortalRepository(config.db_path) if config.db_path.is_file() else None
+        print(json.dumps(run_diagnostics(config, store), ensure_ascii=False, indent=2))
+        return
     print(json.dumps({"configuration_file_exists": env.is_file(), "configured": config.readiness(),
         "data_root": str(config.data_root), "portal_url": config.origin,
         "note": "这里只检查配置是否齐备；真实连接和业务结果见验收记录。"}, ensure_ascii=False, indent=2))

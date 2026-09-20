@@ -1,0 +1,218 @@
+import io
+import json
+import zipfile
+from copy import deepcopy
+from dataclasses import replace
+from pathlib import Path
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from app.errors import DomainError
+from app.portal.diagnostics import input_contract, run_diagnostics
+from app.portal.main import create_app
+from app.portal.repository import PortalRepository
+from app.portal.settings import PortalSettings
+from app.portal.setup import SetupManager, fingerprint
+from app.portal.support import diagnostic_zip, tail, task_diagnostics
+from app.repository import Repository
+from app.safe_diagnostics import public_error, scrub
+from app.workflow_client import WorkflowClient
+
+ROOT = Path(__file__).resolve().parents[1]
+DATASET = "00000000-0000-4000-8000-000000000001"
+
+
+@pytest.fixture
+def environment(tmp_path):
+    config = PortalSettings(data_root=tmp_path / "data", app_env="test", dataset_id=DATASET,
+        dify_base_url="https://dify.invalid/v1", knowledge_api_key="dataset-synthetic-credential-12345",
+        workflow_api_key="app-synthetic-credential-12345", evidence_api_token="synthetic-evidence-secret-12345",
+        evidence_public_url="https://evidence.invalid", mineru_executable=tmp_path / "mineru-kit.exe")
+    config.mineru_executable.touch()
+    store = PortalRepository(config.db_path)
+    store.initialize()
+    Repository(config.evidence_settings().db_path).initialize()
+    store.heartbeat()
+    text = "\n".join("PORTAL_" + key + "=" + value for key, value in {
+        "DATA_ROOT": str(config.data_root), "DIFY_BASE_URL": config.dify_base_url, "DATASET_ID": DATASET,
+        "KNOWLEDGE_API_KEY": config.knowledge_api_key, "WORKFLOW_API_KEY": config.workflow_api_key,
+        "EVIDENCE_API_TOKEN": config.evidence_api_token, "EVIDENCE_PUBLIC_URL": config.evidence_public_url}.items()) + "\n"
+    (tmp_path / ".env.portal").write_text(text, encoding="utf-8")
+    return config, store, SetupManager(config, store, tmp_path)
+
+
+def contract():
+    return json.loads((ROOT / "fixtures/dify_portal/workflow_parameters.real.json").read_text(encoding="utf-8"))
+
+
+def test_draft_is_write_only_preserves_blank_keys_and_active_file(environment):
+    config, store, manager = environment
+    original = manager.env.read_bytes()
+    meta = manager.save({"max_pdf_pages": "120", "workflow_api_key": ""}, manager.file_revision())
+    assert manager.env.read_bytes() == original
+    saved, loaded = manager.read_draft(meta["id"])
+    assert saved.workflow_api_key == config.workflow_api_key and saved.max_pdf_pages == 120
+    assert loaded == meta
+    serialized = json.dumps(manager.public())
+    assert not any(value in serialized for value in config.secret_values())
+    assert "workflow_api_key" in serialized
+    manager.env.write_text(manager.env.read_text(encoding="utf-8") + "# external change\n", encoding="utf-8")
+    with pytest.raises(DomainError, match="其他操作"):
+        manager.read_draft(meta["id"])
+
+
+def test_url_extraction_and_environment_override(environment, monkeypatch):
+    config, _, manager = environment
+    meta = manager.save({"dataset_id": f"https://cloud.dify.ai/datasets/{DATASET}/documents"}, manager.file_revision())
+    assert manager.read_draft(meta["id"])[0].dataset_id == DATASET
+    monkeypatch.setenv("PORTAL_WORKFLOW_API_KEY", "fixed-external-secret")
+    with pytest.raises(DomainError, match="环境变量覆盖"):
+        manager.save({"workflow_api_key": "new-value"}, manager.file_revision())
+    row = next(f for f in manager.public()["fields"] if f["name"] == "workflow_api_key")
+    assert row["environment_override"] and row["value"] == ""
+
+
+def test_config_cannot_switch_existing_library_or_interrupt_jobs(environment):
+    config, store, manager = environment
+    store.publish("publish1", "version1", 1, 1, "")
+    with pytest.raises(DomainError, match="不能换库"):
+        manager.save({"dataset_id": "00000000-0000-4000-8000-000000000002"}, manager.file_revision())
+    meta = manager.save({"max_pdf_pages": "120"}, manager.file_revision())
+    job = store.enqueue("parse", {"document_id": "synthetic"})
+    with pytest.raises(DomainError, match="排队或运行"):
+        manager.begin_apply(meta["id"])
+    assert store.state("maintenance") == ""
+    store.progress(job["id"], "complete", status="succeeded")
+    manager.begin_apply(meta["id"])
+    with pytest.raises(DomainError, match="正在应用"):
+        store.enqueue("parse", {"document_id": "another"})
+    assert store.claim() is None
+
+
+@pytest.mark.parametrize("mutation", ["missing", "wrong_type", "extra_required", "limit", "enum"])
+def test_contract_blocks_incompatible_inputs(mutation):
+    data = contract()
+    if mutation == "missing":
+        data["user_input_form"].pop()
+    elif mutation == "wrong_type":
+        field = data["user_input_form"][0].pop("file-list")
+        data["user_input_form"][0]["text-input"] = field
+    elif mutation == "extra_required":
+        data["user_input_form"].append({"text-input": {"variable": "unexpected", "required": True}})
+    elif mutation == "limit":
+        data["user_input_form"][0]["file-list"]["max_length"] = 1
+    else:
+        data["user_input_form"][1]["select"]["options"] = []
+    errors, _ = input_contract(data, "普通卧式金属车床")
+    assert errors
+
+
+def test_real_input_contract_and_optional_extra_are_compatible():
+    errors, warnings = input_contract(contract(), "普通卧式金属车床")
+    assert errors == [] and warnings == []
+    data = contract()
+    data["user_input_form"].append({"text-input": {"variable": "extra", "required": False}})
+    errors, warnings = input_contract(data, "普通卧式金属车床")
+    assert errors == [] and warnings
+
+
+def mock_services(config, *, forbidden=False):
+    calls = []
+    def handle(request):
+        calls.append(request)
+        assert request.method == "GET"  # 诊断不产生索引、模型或报告。
+        path = request.url.path
+        if "/datasets/" in path:
+            assert request.headers["Authorization"] == "Bearer " + config.knowledge_api_key
+            if forbidden:
+                return httpx.Response(403, json={"code": "rate_limit_exceeded", "message": config.knowledge_api_key}, headers={"Retry-After": "20"})
+            if path.endswith("/metadata"):
+                return httpx.Response(200, json={"doc_metadata": [{"id": "field1", "name": "rag_snapshot_id", "type": "string"}]})
+            return httpx.Response(200, json={"id": config.dataset_id, "name": "synthetic", "document_count": 0,
+                "indexing_technique": "high_quality", "embedding_model": config.embedding_model,
+                "embedding_model_provider": config.embedding_provider, "retrieval_model_dict": {"search_method": "hybrid_search"}})
+        if path.endswith("/info"):
+            assert request.headers["Authorization"] == "Bearer " + config.workflow_api_key
+            return httpx.Response(200, json={"name": "synthetic-app", "mode": "workflow"})
+        if path.endswith("/parameters"):
+            return httpx.Response(200, json=contract())
+        if path.endswith("/health"):
+            assert "Authorization" not in request.headers
+            return httpx.Response(503, json={"status": "not_ready", "database": True, "snapshot_available": False})
+        assert path.endswith("/reports/portal-connectivity-probe")
+        assert request.headers["Authorization"] == "Bearer " + config.evidence_api_token
+        return httpx.Response(404, json={"error": {"code": "report_not_found"}})
+    return calls, httpx.MockTransport(handle)
+
+
+def test_diagnosis_empty_library_is_connected_but_model_is_not_claimed_tested(environment):
+    config, store, _ = environment
+    calls, transport = mock_services(config)
+    result = run_diagnostics(config, store, transport=transport, version_probe=lambda _: {"mineru_version": "4.0.2"})
+    assert result["all_connections_passed"] and result["model_invoked"] is False
+    assert next(c for c in result["checks"] if c["id"] == "workflow.end_to_end")["status"] == "pending"
+    assert next(c for c in result["checks"] if c["id"] == "evidence.https")["status"] == "pass"
+    assert not any(secret in json.dumps(result) for secret in config.secret_values())
+    assert len(calls) == 8
+
+
+def test_diagnostics_distinguishes_forbidden_rate_limit_and_preserves_reason(environment):
+    config, store, _ = environment
+    _, transport = mock_services(config, forbidden=True)
+    result = run_diagnostics(config, store, transport=transport, version_probe=lambda _: {"mineru_version": "4.0.2"})
+    assert not result["gates"]["publish"]
+    failed = next(c for c in result["checks"] if c["id"] == "knowledge.connection")
+    assert failed["details"]["upstream_status"] == 403
+    assert "限流" in failed["suggestion"] and "20" == failed["details"]["retry_after"]
+    assert config.knowledge_api_key not in json.dumps(result)
+
+
+def test_redaction_before_truncation_and_diagnostic_archive(environment, tmp_path):
+    config, store, _ = environment
+    secret = config.evidence_api_token
+    path = tmp_path / "parser.log"
+    path.write_text("a" * 200 + secret + "b" * 99, encoding="utf-8")
+    output = tail(path, limit=110, secrets=[secret])
+    assert secret[-10:] not in output
+    error = DomainError("workflow_failed", "failed " + secret, details={"upstream_message": "Authorization: Bearer " + secret,
+        "inputs": {"prompt": "private"}, "url": "https://user:password@example.test/file?signature=private"})
+    safe = public_error(error, [secret])
+    assert secret not in json.dumps(safe) and "signature" not in json.dumps(safe) and "private" not in json.dumps(safe)
+    job = store.enqueue("assessment", {"inputs": {"private": "business text"}})
+    store.progress(job["id"], "workflow", status="failed", error=safe)
+    data = task_diagnostics(store.job(job["id"]), store, config)
+    with zipfile.ZipFile(io.BytesIO(diagnostic_zip(data))) as archive:
+        assert set(archive.namelist()) == {"diagnostics.json", "README.txt"}
+        text = archive.read("diagnostics.json").decode()
+        assert "business text" not in text and secret not in text
+
+
+def test_sse_node_events_keep_only_diagnostic_fields():
+    captured = []
+    events = [{"event":"node_finished", "workflow_run_id":"run1", "data":{"node_id":"vision","node_type":"llm","title":"视觉观察","status":"failed",
+        "error":"model disabled", "inputs":{"secret":"do-not-log"},"outputs":{"text":"do-not-log"}}},
+        {"event":"workflow_finished","workflow_run_id":"run1","data":{"id":"run1","status":"failed","error":"model disabled"}}]
+    content = "".join("data: " + json.dumps(row) + "\n\n" for row in events)
+    with WorkflowClient("https://dify.invalid/v1", "synthetic", httpx.MockTransport(lambda _: httpx.Response(200, text=content, headers={"Content-Type":"text/event-stream"}))) as client:
+        client.on_event = captured.append
+        result = client.run({}, "local", lambda _:None)
+    assert result["status"] == "failed" and captured[0]["title"] == "视觉观察"
+    assert "do-not-log" not in json.dumps(captured)
+
+
+def test_setup_api_does_not_expose_secrets_or_allow_csrf(environment):
+    config, store, manager = environment
+    app = create_app(config, project_root=manager.root)
+    with TestClient(app, base_url=config.origin) as client:
+        token = client.get("/api/status").json()["csrf_token"]
+        response = client.get("/api/setup")
+        assert not any(secret in response.text for secret in config.secret_values())
+        assert client.post("/api/setup/draft", json={"values":{},"file_revision":manager.file_revision()}).status_code == 403
+        client.headers.update({"Origin":config.origin,"X-CSRF-Token":token})
+        response = client.post("/api/setup/draft", json={"values":{"max_pdf_pages":"99"},"file_revision":manager.file_revision()})
+        assert response.status_code == 200
+        dsl = client.get("/api/setup/workflow.yml?source=draft&draft_id=" + response.json()["id"])
+        assert dsl.status_code == 200 and not any(secret in dsl.text for secret in config.secret_values())
+        assert "portal-v1" in dsl.text and "diagnostic_mode" not in dsl.text

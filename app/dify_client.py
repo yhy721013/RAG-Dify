@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app.errors import DomainError
 from app.repository import now
+from app.safe_diagnostics import scrub, upstream_details
 from app.schemas import Hit
 
 
@@ -99,7 +100,8 @@ class DifyClient:
         (self.capture_dir / (uuid4().hex + ".json")).write_text(
             serialized, encoding="utf-8")
         if not response.is_success:
-            raise DomainError("dify_http_error", f"Dify 返回 HTTP {response.status_code}；详情见脱敏请求记录", status=502)
+            raise DomainError("dify_http_error", f"Dify 返回 HTTP {response.status_code}", status=502,
+                              details=upstream_details(response, [self.settings.dify_api_key]))
         if not is_json or not isinstance(payload, dict):
             raise contract_error()
         return payload
@@ -150,7 +152,10 @@ class DifyClient:
             if status == "completed":
                 return
             if status in {"error", "paused", "stopped"} or document.get("error") or document.get("paused_at"):
-                raise DomainError("indexing_failed", "Dify 索引失败或暂停", "indexing_status", 502)
+                raise DomainError("indexing_failed", "Dify 索引失败或暂停", "indexing_status", 502,
+                    details=scrub({"document_id": document_id, "indexing_status": status,
+                                   "upstream_message": document.get("error"), "upstream_code": document.get("error_code")},
+                                  [self.settings.dify_api_key]))
             if status not in {"waiting", "parsing", "cleaning", "splitting", "indexing"}:
                 raise contract_error("indexing_status")
             if time.monotonic() >= deadline:

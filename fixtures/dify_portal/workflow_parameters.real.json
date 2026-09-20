@@ -1,0 +1,101 @@
+{
+  "user_input_form": [
+    {
+      "file-list": {
+        "variable": "images",
+        "label": "同一设备的图片（1～4张）",
+        "type": "file-list",
+        "required": true,
+        "options": [],
+        "max_length": 4,
+        "allowed_file_types": [
+          "image"
+        ],
+        "allowed_file_extensions": [
+          ".jpg",
+          ".jpeg",
+          ".png"
+        ],
+        "allowed_file_upload_methods": [
+          "local_file"
+        ]
+      }
+    },
+    {
+      "select": {
+        "variable": "equipment_type",
+        "label": "设备类别",
+        "type": "select",
+        "required": true,
+        "options": [
+          "普通卧式金属车床"
+        ],
+        "default": "普通卧式金属车床"
+      }
+    },
+    {
+      "paragraph": {
+        "variable": "equipment_description",
+        "label": "设备用途与结构说明",
+        "type": "paragraph",
+        "required": false,
+        "options": [],
+        "max_length": 4000,
+        "default": ""
+      }
+    },
+    {
+      "select": {
+        "variable": "operating_state",
+        "label": "运行状态",
+        "type": "select",
+        "required": true,
+        "options": [
+          "运行",
+          "停机",
+          "检修",
+          "未知"
+        ],
+        "default": "未知"
+      }
+    },
+    {
+      "paragraph": {
+        "variable": "work_context",
+        "label": "人员接近与作业背景",
+        "type": "paragraph",
+        "required": true,
+        "options": [],
+        "max_length": 4000,
+        "default": "未知"
+      }
+    },
+    {
+      "checkbox": {
+        "variable": "same_equipment_confirmed",
+        "label": "确认全部图片属于同一台设备",
+        "type": "checkbox",
+        "required": true,
+        "options": [],
+        "default": false
+      }
+    },
+    {
+      "text-input": {
+        "variable": "snapshot_id",
+        "label": "后端固定的已发布知识版本",
+        "type": "text-input",
+        "required": true,
+        "options": [],
+        "max_length": 160
+      }
+    }
+  ],
+  "system_parameters": {
+    "image_file_size_limit": 10,
+    "video_file_size_limit": 100,
+    "audio_file_size_limit": 50,
+    "file_size_limit": 15,
+    "workflow_file_upload_limit": 10
+  }
+}

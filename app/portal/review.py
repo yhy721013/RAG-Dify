@@ -196,5 +196,32 @@ def release_preview(store, evidence_repo, document_ids):
                "pending_count": pending_count, "replacements": replacements,
                "unchanged": bool(parent) and combined == comparable,
                "clause_count": len(combined), "standard_count": len({row["standard_uid"] for row in combined})}
+    preview["replacement_details"] = [{"standard_uid": sid,
+        "standard_code": next(row["standard_code"] for row in combined if row["standard_uid"] == sid),
+        "standard_name": next(row["standard_name"] for row in combined if row["standard_uid"] == sid),
+        "before": sum(row["standard_uid"] == sid for row in baseline),
+        "after": sum(row["standard_uid"] == sid for row in combined)} for sid in replacements]
+    by_uid = {row["clause_uid"]: row for row in combined}
+    locations = {item["record"].get("clause_uid"): {"document_id": doc["id"], "candidate_id": item["id"]}
+                 for doc in store.list_documents() for item in doc["payload"].get("candidates", [])}
+    blockers = []
+    def block(record, code, message, target=None):
+        blockers.append({"code": code, "clause_uid": record["clause_uid"], "clause_no": record["clause_no"],
+            "standard_code": record["standard_code"], "message": message, **locations.get(target or record["clause_uid"], {})})
+    seen = set()
+    for row in combined:
+        if row["clause_uid"] in seen:
+            block(row, "duplicate_clause", "所选文件包含重复条款身份，请只选择一个经核对的标准版本")
+        seen.add(row["clause_uid"])
+        for dependency in row["context_clause_uids"]:
+            if dependency not in by_uid:
+                block(row, "missing_context", "必要上下文尚未批准或未包含在本次范围", dependency)
+        def visit(uid, parents):
+            if uid in parents:
+                return True
+            return any(visit(key, parents | {uid}) for key in by_uid[uid]["context_clause_uids"] if key in by_uid)
+        if visit(row["clause_uid"], set()):
+            block(row, "context_cycle", "上下文关系存在循环，请修正引用方向")
+    preview["blockers"] = blockers
     preview["preview_hash"] = digest(preview)
     return preview

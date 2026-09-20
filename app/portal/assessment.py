@@ -5,6 +5,7 @@ import httpx
 from app.dify_client import contract_error
 from app.errors import DomainError
 from app.repository import Repository, sha256
+from app.safe_diagnostics import scrub
 from app.workflow_client import WorkflowClient
 from ingestion.mineru_adapter import file_sha256, local_path
 
@@ -32,6 +33,7 @@ def assess(job, store, config, client_factory=WorkflowClient):
     if not any(row["snapshot_id"] == payload["snapshot_id"] for row in store.releases()):
         raise DomainError("snapshot_not_allowed", "本次固定的知识版本尚未发布")
     with client_factory(config.dify_base_url, config.workflow_api_key) as client:
+        client.on_event = lambda event: store.note_event(job["id"], "workflow_node", scrub(event, config.secret_values()))
         if result.get("run_id"):
             store.progress(job["id"], "reconciling", result)
             finished = client.reconcile(result["run_id"], store.heartbeat)
@@ -67,7 +69,12 @@ def assess(job, store, config, client_factory=WorkflowClient):
                 store.progress(job["id"], "reconciling", result)
                 finished = client.reconcile(result["run_id"], store.heartbeat)
         if finished.get("status") != "succeeded":
-            raise DomainError("workflow_failed", "Dify 工作流未成功完成，请查看对应运行记录；没有可展示的成功报告", status=502)
+            message = str(finished.get("error") or "远端未提供失败详情")
+            scope_error = "图片无法确认同一设备" in message
+            raise DomainError("equipment_scope_error" if scope_error else "workflow_failed",
+                "图片不属于同一设备或无法辨认，请重新核对图片" if scope_error else "Dify 工作流未成功完成",
+                status=502, details=scrub({"run_id": result["run_id"], "remote_status": finished.get("status"),
+                    "upstream_message": message}, config.secret_values()))
         if finished.get("id") != result.get("run_id"):
             raise DomainError("workflow_identity_error", "工作流完成事件的运行身份不一致")
         report_id = finished.get("outputs", {}).get("report_id")

@@ -56,6 +56,8 @@ class PortalRepository(Repository):
         return self.document(document_id)
 
     def _enqueue(self, conn, kind, payload, key):
+        if conn.execute("SELECT 1 FROM state WHERE key='maintenance' AND value<>''").fetchone():
+            raise DomainError("configuration_applying", "正在应用配置，暂不接受新任务", status=409)
         row = conn.execute("SELECT * FROM jobs WHERE dedupe_key=?", (key,)).fetchone()
         if row:
             if decode(row)["payload"] != payload:
@@ -83,7 +85,9 @@ class PortalRepository(Repository):
 
     def claim(self):
         with self.connect(write=True) as conn:
-            row = conn.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,id LIMIT 1").fetchone()
+            if conn.execute("SELECT 1 FROM state WHERE key='maintenance' AND value<>''").fetchone():
+                return None
+            row = conn.execute("SELECT * FROM jobs WHERE status='queued' AND kind<>'diagnostics' ORDER BY created_at,id LIMIT 1").fetchone()
             if not row:
                 return None
             conn.execute("UPDATE jobs SET status='running',updated_at=? WHERE id=?", (now(), row["id"]))
@@ -107,11 +111,33 @@ class PortalRepository(Repository):
         with self.connect() as conn:
             return [decode(row) for row in conn.execute("SELECT * FROM job_events WHERE job_id=? ORDER BY id", (job_id,))]
 
-    def recover(self):
+    def note_event(self, job_id, stage, detail):
+        with self.connect(write=True) as conn:
+            conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) VALUES(?,?,'info',?,?)",
+                         (job_id, stage, json_text(detail), now()))
+
+    def set_state(self, key, value):
+        with self.connect(write=True) as conn:
+            conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)", (key, value))
+
+    def begin_maintenance(self, identity):
+        with self.connect(write=True) as conn:
+            if conn.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running') LIMIT 1").fetchone():
+                raise DomainError("jobs_busy", "有排队或运行中的任务，请待完成后应用配置", status=409)
+            if conn.execute("SELECT 1 FROM state WHERE key='maintenance' AND value<>''").fetchone():
+                raise DomainError("configuration_applying", "已有配置应用操作进行中", status=409)
+            conn.execute("INSERT OR REPLACE INTO state VALUES('maintenance',?)", (identity,))
+
+    def recover(self, include_diagnostics=True):
         # 仅在取得操作系统独占 worker 锁后调用。
         with self.connect(write=True) as conn:
-            conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) SELECT id,stage,'interrupted','{}',? FROM jobs WHERE status='running'", (now(),))
-            conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE status='running'", (now(),))
+            condition = "status='running'" + ("" if include_diagnostics else " AND kind<>'diagnostics'")
+            conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) SELECT id,stage,'interrupted','{}',? FROM jobs WHERE " + condition, (now(),))
+            conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE " + condition, (now(),))
+
+    def interrupt_diagnostics(self):
+        with self.connect(write=True) as conn:
+            conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE kind='diagnostics' AND status IN ('queued','running')", (now(),))
 
     def retry(self, job_id):
         job = self.job(job_id)
