@@ -88,6 +88,8 @@ def edit_candidate(payload, candidate_id, changes, block_ids, root):
     if set(changes) - set(EDITABLE):
         raise DomainError("invalid_edit", "禁止通过编辑接口改变批准状态或原始来源")
     record.update(changes)
+    if "context_clause_uids" in changes:
+        item_for(result, candidate_id)["context_reviewed"] = True
     ClauseRecord.model_validate(record)
     if record["clause_no"] != record["clause_path"][-1]:
         raise DomainError("invalid_edit", "条款号须等于完整路径最后一级")
@@ -96,6 +98,34 @@ def edit_candidate(payload, candidate_id, changes, block_ids, root):
     identify(record)
     invalidate_dependents(result, previous_uid)
     ClauseRecord.model_validate(record)
+    return result
+
+
+def batch_review(payload, candidate_ids, actor, acknowledgements, root, analysis, action):
+    if not candidate_ids or len(candidate_ids) > 100 or len(set(candidate_ids)) != len(candidate_ids):
+        raise DomainError("input_error", "每次选择1～100条不同候选")
+    rows = {row["candidate_id"]: row for row in analysis["rows"]}
+    if not set(candidate_ids) <= rows.keys():
+        raise DomainError("revision_conflict", "所选条款已变化，请重新查看对照", status=409)
+    result = deepcopy(payload)
+    for identity in candidate_ids:
+        item = item_for(result, identity)
+        row = rows[identity]
+        if item["record"]["content_review_status"] == "approved":
+            raise DomainError("review_required", "所选项含已有批准记录，请只选择待复核条款")
+        if action == "apply_context":
+            if not item["record"].get("clause_uid"):
+                raise DomainError("review_required", "先对照并保存标准身份信息")
+            uids = list(dict.fromkeys([*item["record"]["context_clause_uids"],
+                                      *(v["clause_uid"] for v in row["suggested_context"] if v["clause_uid"])]))
+            bids = [bid for span in item["record"]["source_spans"] for bid in span["block_ids"]]
+            result = edit_candidate(result, identity, {"context_clause_uids": uids}, bids, root)
+        elif action == "approve_batch":
+            if row["group"] != "normal" or row["context_needs_confirmation"]:
+                raise DomainError("review_required", "批量批准只接受无规则疑点且已核对上下文建议的条款；异常项请逐项复核", details={"candidate_id": identity, "issues": row["issues"]})
+            result = approve(result, identity, actor, acknowledgements, root)
+        else:
+            raise DomainError("input_error", "未知批量复核动作")
     return result
 
 

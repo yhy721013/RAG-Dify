@@ -628,6 +628,34 @@ footer {
 #setup-state {
   margin-bottom: 18px;
 }
+.review-batch-card {
+  border: 1px solid #d5e0d6;
+  padding: 18px;
+  margin: 16px 0;
+  border-radius: 6px;
+}
+.batch-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.batch-comparison pre {
+  white-space: pre-wrap;
+  max-height: 420px;
+  overflow: auto;
+  font-size: 13px;
+}
+#review-assistance {
+  margin-bottom: 24px;
+}
+#candidate-assistance {
+  margin: 16px 0;
+}
+@media (max-width: 750px) {
+  .batch-comparison {
+    grid-template-columns: 1fr;
+  }
+}
 #message pre {
   max-height: 280px;
   overflow: auto;

@@ -105,6 +105,8 @@ def parse_document(job, store, config, parser=run_parser):
     atomic_json(export / "normalized.json", normalized)
     payload = {"normalized": normalized, "metadata": {},
                "candidates": [{"id": "candidate_" + uuid4().hex, "record": row} for row in items]}
+    from app.portal.assistance import metadata_draft
+    payload["metadata_suggestions"] = metadata_draft(payload)
     atomic_json(directory / "candidates.original.json", payload)
     store.save_document(doc["id"], doc["revision"], payload, "pending_review", "mineru_parse", "system:mineru-4.0.2")
     return {**result, "candidate_count": len(items), "full_document_covered": normalized["full_document_covered"]}

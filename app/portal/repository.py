@@ -45,6 +45,15 @@ class PortalRepository(Repository):
             self._enqueue(conn, "parse", {"document_id": uid}, "parse:" + uid)
         return self.document(uid), True
 
+    def review_baseline(self, document):
+        with self.connect() as conn:
+            row = conn.execute("SELECT revision,payload_json FROM review_audit WHERE document_id=? AND revision<? AND action IN ('approve','approve_batch') ORDER BY revision DESC LIMIT 1",
+                               (document["id"], document["revision"])).fetchone()
+        if not row:
+            return None
+        return {**document, "revision": row["revision"], "payload": json.loads(row["payload_json"]),
+                "filename": document["filename"] + "（本文件历史批准记录）"}
+
     def save_document(self, document_id, revision, payload, status, action, actor):
         with self.connect(write=True) as conn:
             changed = conn.execute("UPDATE documents SET payload_json=?,status=?,revision=revision+1 WHERE id=? AND revision=?",

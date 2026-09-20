@@ -468,7 +468,9 @@ function fillDocument(doc, selection) {
     input.value =
       doc.payload.metadata?.[key] ||
       doc.payload.candidates[0]?.record[key] ||
+      doc.assistance?.metadata_draft?.values[key] ||
       "";
+    input.dataset.initialValue = input.value;
     input.required = true;
     label.append(input);
     root.append(label);
@@ -488,9 +490,12 @@ function fillDocument(doc, selection) {
     : doc.payload.candidates[0]?.id;
   fillCandidate();
   renderCandidateFilter(selection);
+  window.reviewUI?.render();
 }
-async function openDocument(id) {
-  const doc = await api(`/api/documents/${id}`);
+async function openDocument(id, baseline = "") {
+  const doc = await api(
+    `/api/documents/${id}?baseline_id=${encodeURIComponent(baseline)}`,
+  );
   reviewOptions = await api(
     "/api/review/options?document_id=" + encodeURIComponent(id),
   );
@@ -522,6 +527,7 @@ function fillCandidate() {
   if (first) showPage(first.pdf_page_index + 1);
   renderSourceOptions();
   renderContextOptions();
+  window.reviewUI?.renderCandidate();
 }
 function actor() {
   const value = $("#review-actor").value.trim();
@@ -652,6 +658,10 @@ $("#preview-release").addEventListener("click", () =>
     );
     if (!ids.length) throw new Error("请先勾选标准文件");
     releasePreview = await post("/api/releases/preview", { document_ids: ids });
+    caseRows = (releasePreview.case_draft?.cases || []).map((row) => ({
+      ...row,
+      confirmed: false,
+    }));
     $("#release-summary").textContent =
       `基础版本：${releasePreview.parent || "空库"}\n本次形成：${releasePreview.standard_count} 份标准 / ${releasePreview.clause_count} 条已批准条款\n未纳入的待复核条款：${releasePreview.pending_count}\n被替换的同标准版本：${releasePreview.replacements.join(", ") || "无"}`;
     $("#release-clauses").textContent = releasePreview.records
@@ -680,6 +690,10 @@ $("#publish-release").addEventListener("click", () =>
       confirm_replacements: $("#confirm-replace").checked,
       actor: $("#release-actor").value,
       cases: collectCases(),
+      case_draft_id: releasePreview.case_draft?.id || "",
+      confirmed_case_ids: caseRows
+        .filter((r) => r.confirmed)
+        .map((r) => r.case_id),
     });
     message("已提交发布任务：" + job.id);
     show("jobs");
@@ -846,9 +860,9 @@ function candidateDirty() {
   );
 }
 function ensureSavedReview() {
-  const record = currentDoc.payload.candidates.find(
-    (row) => row.id === selectedCandidate,
-  ).record;
+  const record =
+    currentDoc.payload.candidates.find((row) => row.id === selectedCandidate)
+      ?.record || {};
   const metadataDirty = [
     ...document.querySelectorAll("#metadata-fields [name]"),
   ].some(
@@ -1079,9 +1093,7 @@ function reviewDirty() {
   return (
     candidateDirty() ||
     [...document.querySelectorAll("#metadata-fields [name]")].some(
-      (n) =>
-        n.value !==
-        (currentDoc.payload.metadata?.[n.name] || record[n.name] || ""),
+      (n) => n.value !== (n.dataset.initialValue || ""),
     )
   );
 }
@@ -1187,6 +1199,8 @@ function drawCases() {
     query.placeholder = "例如：防护装置的连接需要满足哪些要求？";
     query.addEventListener("input", () => {
       row.query = query.value;
+      row.confirmed = false;
+      confirmCase.checked = false;
       syncCasesJson();
     });
     label.append(query);
@@ -1206,6 +1220,8 @@ function drawCases() {
       box.checked = row.expected_clause_uids.includes(clause.clause_uid);
       box.disabled = !row.answerable;
       box.addEventListener("change", () => {
+        row.confirmed = false;
+        confirmCase.checked = false;
         row.expected_clause_uids = box.checked
           ? [...row.expected_clause_uids, clause.clause_uid]
           : row.expected_clause_uids.filter((u) => u !== clause.clause_uid);
@@ -1221,16 +1237,29 @@ function drawCases() {
       targets.append(l);
     }
     none.addEventListener("change", () => {
+      row.confirmed = false;
       row.answerable = !none.checked;
       if (!row.answerable) row.expected_clause_uids = [];
       drawCases();
     });
+    const confirmLabel = element("label", undefined, "check"),
+      confirmCase = element("input");
+    confirmCase.type = "checkbox";
+    confirmCase.checked = !!row.confirmed;
+    confirmCase.addEventListener("change", () => {
+      row.confirmed = confirmCase.checked;
+    });
+    confirmLabel.append(
+      confirmCase,
+      element("span", "我已核对本题与预期命中条款，确认可用于检索自检"),
+    );
     card.append(
       title,
       label,
       noneLabel,
       element("p", "勾选预期命中的条款（可多选，必须由复核人确认）：", "hint"),
       targets,
+      confirmLabel,
     );
     const allowed = new Set(releasePreview.records.map((r) => r.clause_uid));
     if (row.expected_clause_uids.some((uid) => !allowed.has(uid))) {
@@ -1240,6 +1269,7 @@ function drawCases() {
         row.expected_clause_uids = row.expected_clause_uids.filter((uid) =>
           allowed.has(uid),
         );
+        row.confirmed = false;
         drawCases();
       });
       card.append(
@@ -1256,12 +1286,18 @@ function drawCases() {
   syncCasesJson();
 }
 function syncCasesJson() {
-  $("#release-cases").value = JSON.stringify(caseRows, null, 2);
+  $("#release-cases").value = JSON.stringify(
+    caseRows.map(({ confirmed, ...row }) => row),
+    null,
+    2,
+  );
 }
 function collectCases() {
   if (!caseRows.length || !caseRows.some((r) => r.answerable))
     throw new Error("至少添加一道可回答问题");
   const allowed = new Set(releasePreview.records.map((r) => r.clause_uid));
+  if (caseRows.some((r) => !r.confirmed))
+    throw new Error("请逐题核对问题与预期答案并勾选确认；修改后需重新确认");
   for (const [index, row] of caseRows.entries())
     if (
       !row.query.trim() ||
@@ -1271,7 +1307,10 @@ function collectCases() {
       throw new Error(
         `问题 ${index + 1} 尚未填写完整或目标已失效，请核对问题和条款选择`,
       );
-  return caseRows.map((r) => ({ ...r, query: r.query.trim() }));
+  return caseRows.map(({ confirmed, ...r }) => ({
+    ...r,
+    query: r.query.trim(),
+  }));
 }
 $("#add-retrieval-case").addEventListener("click", () => {
   caseRows.push({

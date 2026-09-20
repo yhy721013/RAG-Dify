@@ -15,6 +15,7 @@ from pydantic import Field, ValidationError
 
 from app.errors import DomainError
 from app.portal import review
+from app.portal import assistance
 from app.portal.files import save_upload, validate_image, validate_pdf
 from app.portal.repository import PortalRepository
 from app.portal.settings import PortalSettings, bootstrap_settings
@@ -26,7 +27,7 @@ from app.repository import Repository, digest, now
 from app.schemas import StrictModel
 from app.settings import ROOT
 from evals.evaluate_retrieval import RetrievalCase
-from ingestion.mineru_adapter import local_path
+from ingestion.mineru_adapter import local_path, file_sha256
 
 
 class ReviewAction(StrictModel):
@@ -38,6 +39,8 @@ class ReviewAction(StrictModel):
     acknowledgements: list[str] = Field(default_factory=list)
     offset: int = 0
     candidate_ids: list[str] = Field(default_factory=list)
+    review_hash: str = ""
+    baseline_id: str = ""
 
 
 class ReleaseAction(StrictModel):
@@ -46,6 +49,8 @@ class ReleaseAction(StrictModel):
     confirm_replacements: bool = False
     cases: list[dict] = Field(default_factory=list, max_length=100)
     actor: str = Field(default="", max_length=100)
+    case_draft_id: str = ""
+    confirmed_case_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
 def public_job(job):
@@ -182,19 +187,26 @@ def create_app(config=None, project_root=ROOT):
             target = settings.data_root / "raw_pdf" / (checksum + ".pdf")
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.exists():
+                if file_sha256(target) != checksum:
+                    raise DomainError("source_archive_changed", "同名归档PDF已发生变化，请先核对并恢复原始归档", status=409)
                 path.unlink()
             else:
                 path.replace(target)
             doc, created = store.register_document(checksum, name, target.relative_to(settings.data_root).as_posix(), pages)
+            if not created:
+                archived = local_path(settings.data_root, doc["source_path"])
+                if not archived.is_file() or file_sha256(archived) != checksum:
+                    raise DomainError("source_archive_changed", "已有文件的归档不再匹配，未沿用批准记录", status=409)
             return {"document_id": doc["id"], "reused": not created, "status": doc["status"], "bytes": size, "pages": pages}
         finally:
             path.unlink(missing_ok=True)
 
     @app.get("/api/documents/{document_id}")
-    def document(document_id: str):
+    def document(document_id: str, baseline_id: str = ""):
         doc = store.document(document_id)
         refs = {ref for page in doc["payload"].get("normalized", {}).get("pages", []) for block in page["blocks"] for ref in block["asset_refs"]}
-        return {**doc, "asset_links": {ref: f"/api/documents/{document_id}/assets/{digest(ref)}" for ref in refs}}
+        return {**doc, "asset_links": {ref: f"/api/documents/{document_id}/assets/{digest(ref)}" for ref in refs},
+                "assistance": assistance.analyze(doc, settings.data_root, store.list_documents(), store.review_baseline(doc), baseline_id)}
 
     @app.get("/api/review/options")
     def review_options(document_id: str):
@@ -254,7 +266,18 @@ def create_app(config=None, project_root=ROOT):
     def metadata(document_id: str, body: ReviewAction):
         doc = store.document(document_id)
         payload = review.update_metadata(doc["payload"], body.metadata)
-        return store.save_document(document_id, body.revision, payload, "pending_review", "metadata", body.actor)
+        store.save_document(document_id, body.revision, payload, "pending_review", "metadata", body.actor)
+        return document(document_id)
+
+    @app.post("/api/documents/{document_id}/review/{action}")
+    def batch(document_id: str, action: str, body: ReviewAction):
+        doc = store.document(document_id)
+        analysis = assistance.analyze(doc, settings.data_root, store.list_documents(), store.review_baseline(doc), body.baseline_id)
+        if body.review_hash != analysis["review_hash"]:
+            raise DomainError("revision_conflict", "批量对照已过期，请重新查看并确认", status=409)
+        payload = review.batch_review(doc["payload"], body.candidate_ids, body.actor, body.acknowledgements, settings.data_root, analysis, action)
+        store.save_document(document_id, body.revision, payload, "pending_review", action, body.actor)
+        return document(document_id, body.baseline_id)
 
     @app.post("/api/documents/{document_id}/candidates/{candidate_id}/{action}")
     def candidate(document_id: str, candidate_id: str, action: str, body: ReviewAction):
@@ -262,6 +285,11 @@ def create_app(config=None, project_root=ROOT):
         if action == "edit":
             payload = review.edit_candidate(doc["payload"], candidate_id, body.changes, body.block_ids, settings.data_root)
         elif action == "approve":
+            review.item_for(doc["payload"], candidate_id)
+            analysis = assistance.analyze(doc, settings.data_root)
+            row = next(row for row in analysis["rows"] if row["candidate_id"] == candidate_id)
+            if row["hard_blocked"]:
+                raise DomainError("review_required", "来源、编号或页覆盖存在阻塞，不能批准", details={"issues": row["issues"], "document_checks": analysis["document_checks"]})
             payload = review.approve(doc["payload"], candidate_id, body.actor, body.acknowledgements, settings.data_root)
         elif action == "split":
             payload = review.split_candidate(doc["payload"], candidate_id, body.offset)
@@ -269,7 +297,8 @@ def create_app(config=None, project_root=ROOT):
             payload = review.merge_candidates(doc["payload"], [candidate_id, *body.candidate_ids], settings.data_root)
         else:
             raise DomainError("not_found", "未知复核操作", status=404)
-        return store.save_document(document_id, body.revision, payload, "pending_review", action, body.actor)
+        store.save_document(document_id, body.revision, payload, "pending_review", action, body.actor)
+        return document(document_id)
 
     @app.get("/api/jobs")
     def jobs():
@@ -315,7 +344,8 @@ def create_app(config=None, project_root=ROOT):
 
     @app.post("/api/releases/preview")
     def preview(body: ReleaseAction):
-        return review.release_preview(store, evidence, body.document_ids)
+        value = review.release_preview(store, evidence, body.document_ids)
+        return {**value, "case_draft": assistance.retrieval_drafts(value)}
 
     @app.post("/api/releases")
     def release(body: ReleaseAction):
@@ -332,6 +362,10 @@ def create_app(config=None, project_root=ROOT):
             raise DomainError("replacement_confirmation", "本次将替换同标准版本的条款集合，请确认预览", status=409)
         if not body.actor.strip() or not body.cases:
             raise DomainError("review_required", "请填写人工标注的检索问题、目标条款与复核人")
+        if body.case_draft_id:
+            draft = assistance.retrieval_drafts(candidate)
+            if body.case_draft_id != draft["id"] or set(body.confirmed_case_ids) != {r.get("case_id") for r in body.cases}:
+                raise DomainError("review_required", "问题草稿或预期答案尚未逐题人工确认，或批准范围已变化", "cases")
         snapshot_id = "portal_" + digest([body.preview_hash, body.cases, body.actor])[:24]
         cases = [RetrievalCase.model_validate({**row, "snapshot_id": snapshot_id, "annotated_by": body.actor,
                     "annotated_at": now()}).model_dump() for row in body.cases]
@@ -343,7 +377,10 @@ def create_app(config=None, project_root=ROOT):
         existing = next((row for row in store.jobs() if row["kind"] == "publish" and row["payload"].get("snapshot_id") == snapshot_id), None)
         if existing:
             return public_job(existing)
-        candidate.update(snapshot_id=snapshot_id, cases=cases)
+        candidate.update(snapshot_id=snapshot_id, cases=cases, case_review={
+            "source": "rule_draft_confirmed" if body.case_draft_id else "manual_annotation",
+            "draft_id": body.case_draft_id, "confirmed_case_ids": body.confirmed_case_ids,
+            "reviewed_by": body.actor, "reviewed_at": cases[0]["annotated_at"]})
         return public_job(store.enqueue("publish", candidate, "publish:" + snapshot_id))
 
     @app.post("/api/assessments")

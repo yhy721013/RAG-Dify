@@ -6,6 +6,7 @@
     <title>标准与设备 · 本地评估台</title>
     <link rel="stylesheet" href="/static/portal.css" />
     <script src="/static/portal.js" defer></script>
+    <script src="/static/portal-review.js" defer></script>
     <script src="/static/portal-setup.js" defer></script>
   </head>
   <body>
@@ -71,7 +72,7 @@
           <pre id="release-summary"></pre>
           <div id="release-blockers"></div>
           <p>
-            为本次批准范围填写检索问题，再勾选预期命中的条款。至少一道可回答题；可另外添加无答案问题。
+            系统按批准条款生成检索问题草稿。请逐题核对问题和预期答案后勾选确认；至少一道可回答题，可另加无答案问题。
           </p>
           <div id="retrieval-case-editor"></div>
           <button type="button" id="add-retrieval-case" class="secondary">
@@ -96,6 +97,90 @@
       <section id="review-view" class="view" hidden>
         <button id="back-library" class="secondary">← 返回标准资料库</button>
         <h2 id="review-title"></h2>
+        <details id="review-assistance" class="card">
+          <summary>自动整理与集中复核</summary>
+          <p id="review-assistance-summary"></p>
+          <div id="document-checks"></div>
+          <label>对照基准<select id="review-baseline"></select></label>
+          <p class="hint">
+            规则建议不代替人工核对。完全相同PDF复用原记录；新文件中的未变条款可集中对照，新来源仍须确认。
+          </p>
+          <div class="form-grid">
+            <label
+              >集中处理<select id="batch-filter">
+                <option value="pending">全部待复核</option>
+                <option value="normal">无规则疑点</option>
+                <option value="exception">异常集中处理</option>
+                <option value="changed">变更与受影响依赖</option>
+                <option value="unchanged">与基准原文未变</option>
+                <option value="all">全部含已批准</option>
+              </select></label
+            >
+            <label
+              >搜索条款<input id="batch-search" placeholder="条款号或原文"
+            /></label>
+          </div>
+          <div class="actions">
+            <button type="button" id="batch-select" class="secondary">
+              选取本页可批量条款
+            </button>
+            <button type="button" id="batch-clear" class="secondary">
+              清空选择
+            </button>
+            <button type="button" id="batch-context" class="secondary">
+              采纳所选条款上下文建议
+            </button>
+          </div>
+          <p id="batch-count" class="hint"></p>
+          <div id="batch-cards"></div>
+          <div class="actions">
+            <button type="button" id="batch-previous" class="secondary">
+              上一组
+            </button>
+            <button type="button" id="batch-next" class="secondary">
+              下一组
+            </button>
+          </div>
+          <label>批量复核人<input id="batch-actor" maxlength="100" /></label>
+          <fieldset id="batch-acknowledgements">
+            <legend>确认对照了所有勾选条款的PDF原页</legend>
+            <label class="check"
+              ><input
+                type="checkbox"
+                value="text"
+              />原文、数字、单位和否定词均已核对</label
+            >
+            <label class="check"
+              ><input
+                type="checkbox"
+                value="boundary"
+              />条款边界、页覆盖和跨页衔接完整</label
+            >
+            <label class="check"
+              ><input
+                type="checkbox"
+                value="context"
+              />必要上下文和适用前提已核对</label
+            >
+            <label class="check"
+              ><input
+                type="checkbox"
+                value="assets"
+              />图表、脚注与资产均已核对</label
+            >
+            <label class="check"
+              ><input
+                type="checkbox"
+                value="scope"
+              />标准身份、状态与适用范围均已核验</label
+            >
+          </fieldset>
+          <button type="button" id="batch-approve">确认批准所选普通条款</button>
+          <details id="removed-clause-panel" hidden>
+            <summary>基准中存在、当前文件未找到的条款</summary>
+            <div id="removed-clauses"></div>
+          </details>
+        </details>
         <div class="review-grid">
           <div class="pdf-pane">
             <div class="page-tools">
@@ -118,6 +203,7 @@
           <div class="review-pane">
             <details id="metadata-details" open>
               <summary>标准身份与状态核验</summary>
+              <p id="metadata-suggestion-note" class="hint"></p>
               <form id="metadata-form">
                 <div id="metadata-fields"></div>
                 <label
@@ -146,6 +232,7 @@
             <label>候选条款<select id="candidate-select"></select></label>
             <p id="candidate-count" class="hint"></p>
             <div id="candidate-info" class="notice"></div>
+            <div id="candidate-assistance"></div>
             <form id="candidate-form">
               <label>条款号<input id="clause-no" required /></label
               ><label

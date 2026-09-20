@@ -20,10 +20,13 @@ def candidates(document: dict, data_root: Path) -> list[dict]:
             kind, text = block["block_type"], block["text"]
             if kind in {"index", "header", "footer", "page_number", "aside_text"} or TOC.search(text):
                 continue
-            appendix, match = APPENDIX.match(text), CLAUSE.match(text)
+            appendix = APPENDIX.match(text)
+            # 图表单元格中的数字不作为新条款；独立标题编号可与下一块正文衔接。
+            match = CLAUSE.match(text) if kind in {"text", "paragraph_title", "doc_title"} else None
+            bare = re.fullmatch(r"\s*((?:[1-9]\d*)(?:\.\d+)*|[A-Z](?:\.\d+)+)\s*", text) if kind == "paragraph_title" else None
             if appendix:
                 appendix_section = appendix.group(1)
-            number = appendix.group(1) if appendix else match.group(1) if match else None
+            number = appendix.group(1) if appendix else match.group(1) if match else bare.group(1) if bare else None
             if number or current is None:
                 if current:
                     output.append(current)
