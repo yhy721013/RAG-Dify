@@ -3,9 +3,9 @@
   "kind": "app",
   "dependencies": [],
   "app": {
-    "name": "机械设备安全评估（阶段D）",
+    "name": "机械设备安全评估（历史阶段D模板）",
     "mode": "workflow",
-    "description": "阶段D普通车床公开图片技术测试；报告待专业人员复核",
+    "description": "历史单快照模板，需绑定自有环境；当前门户请从配置向导生成七输入DSL",
     "icon": "⚙️",
     "icon_background": "#E4FBCC",
     "use_icon_as_answer_icon": false
@@ -21,7 +21,7 @@
           "EVIDENCE_API_BASE_URL"
         ],
         "value_type": "string",
-        "value": "https://depot-twice-low-samuel.trycloudflare.com"
+        "value": "https://REPLACE_EVIDENCE_HOST.invalid"
       },
       {
         "id": "023c3af9-1212-566f-a15d-a4b80f61f014",
@@ -43,7 +43,7 @@
           "SNAPSHOT_ID"
         ],
         "value_type": "string",
-        "value": "pilot_20260918_01"
+        "value": "REPLACE_SNAPSHOT_ID"
       },
       {
         "id": "b1ca0537-a6c7-53b8-9028-e48ea28b5470",
@@ -54,7 +54,7 @@
           "DATASET_ID"
         ],
         "value_type": "string",
-        "value": "f1327a8e-4ab6-4ea9-ab38-9a07c9fd9299"
+        "value": "REPLACE_DATASET_ID"
       },
       {
         "id": "146fc076-85b4-578d-ad71-c5018e038683",
@@ -801,7 +801,7 @@
             "desc": "阶段D候选；实际运行验收前不发布",
             "selected": false,
             "dataset_ids": [
-              "f1327a8e-4ab6-4ea9-ab38-9a07c9fd9299"
+              "REPLACE_DATASET_ID"
             ],
             "query_variable_selector": [
               "query",

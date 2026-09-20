@@ -342,3 +342,14 @@
 
 - a48aa97源码ZIP解压到tmp/portal-final-a48aa97；在该目录使用工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：**166 passed in 5.88s**，2条既有弃用警告。ZIP有123个文件及15个目录项，无运行配置、data/test_files/虚拟环境，当前已知凭据精确命中0。记录final-archive.json。
 - 本记录是文档补记；最终ZIP由包含此记录的干净HEAD重新导出，应用代码、测试和依赖与已复验的a48aa97相同。仅交付本地源码包，未推送远端。浏览器已保留最新成功报告；未发现本轮最终页面的未处理JavaScript异常。
+
+## Windows 开发者预览版 — 文档与交付入口整理（2026-09-20）
+
+- 按新的目标只整理上手/发布材料，不扩大产品功能。修改前核对f73c6f2干净工作区、架构指南、入口代码、启动脚本和历史DSL；创建codex/windows-preview-docs分支。
+- README以8001门户为推荐入口，旧8000/单快照内容集中到docs/legacy-stage-d.md；旧手册和工作流规格增加历史提示。运行手册只保留一条首次启动命令，各步骤列出成功标志/失败入口；集中Windows、PowerShell7、Python3.12/Launcher、Dify/模型/网络准备条件及远程数据去向。
+- 新增docs/first-test.md，提供自主获取PDF、公开历史图片来源/署名/许可、工况文本、条款复核、检索标注与报告判据。说明源码没有原试点10条知识库，data路径是运行产物。图片来源页及官方标准检索入口已在线复查，未重新下载业务材料或复制标准原文。
+- workflows/safety-assessment.yml仅改6处：应用名称/描述、HTTPS、SNAPSHOT_ID、DATASET_ID及检索节点dataset_ids。19节点代码、边、提示词与六输入契约未变，Secret仍为空。两份交付DSL均使用占位绑定；新门户继续引导页面生成当前环境七输入DSL。已配置Dify应用未改动，未重写Git历史。
+- 本地工作区.venv执行 python -X utf8 -m pytest -q：166 passed in 5.62s，两条既有第三方弃用警告。扩展既有DSL契约测试，验证公开占位值、env/检索库一致且无临时隧道地址。34个本地文档链接/锚点、7个PowerShell命令块语法通过，首次启动命令计数=1，git diff --check通过；详情保存在data/docs-preview/document-check.json。
+- 本轮没有重新运行MinerU/真实Dify，旧真实验收记录保留其原始上下文。浏览器仅查看当前门户配置页面；截图导出的data:导航被浏览器URL安全策略阻止，未绕过。源码包不含新的页面截图；不影响上述高优先级文档/模板整理。一次临时截图保存页命令未执行成功，经检查没有生成目录或8017监听，未留下辅助服务。
+- 新增docs/windows-preview-release.md发布说明，保留未指定开源许可证、需自备云端凭据/合法资料、单机/临时隧道/专业复核限制。当前不创建或推送远程仓库，也不代替所有者决定公开许可。
+- 补齐发布说明后的最终检查：39个本地文档链接/锚点全部有效，126个当前源码文件的已知配置凭据精确匹配0处；记录data/docs-preview/release-check.json。没有改变运行时源码、依赖或业务处理契约。

@@ -31,6 +31,11 @@ def test_delivered_dsl_keeps_current_gates_and_server_report_path():
         assert [edge["source"] for edge in graph["edges"] if edge["target"] == target] == [source]
     environment = {item["name"]: item["value"] for item in document["workflow"]["environment_variables"]}
     assert environment["EVIDENCE_API_TOKEN"] == ""
+    assert environment["EVIDENCE_API_BASE_URL"] == "https://REPLACE_EVIDENCE_HOST.invalid"
+    assert environment["SNAPSHOT_ID"] == "REPLACE_SNAPSHOT_ID"
+    assert environment["DATASET_ID"] == "REPLACE_DATASET_ID"
+    assert nodes["retrieval"]["dataset_ids"] == [environment["DATASET_ID"]]
+    assert ".trycloudflare.com" not in json.dumps(document)
     assert json.loads(environment["CHECKLIST_JSON"]) == json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))
     assert nodes["vision"]["vision"]["configs"]["variable_selector"] == nodes["assessment"]["vision"]["configs"]["variable_selector"] == ["start", "images"]
 

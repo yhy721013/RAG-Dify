@@ -21,7 +21,7 @@
 | Workspace 模型详情查询 | 返回403：当前 dataset scoped key 无此接口授权；未申请扩大密钥权限 |
 | 多模态模型 ID | Qwen/Qwen3.5-27B，enable_thinking=false；两个节点已通过真实单图、双图完整流程；原Qwen/Qwen2.5-VL-32B-Instruct返回403 Model disabled |
 | Workflow DSL 版本 | 0.7.0；stage-d-v3，19节点；本轮单图／双图完整流程及真实失败输入回放通过，未发布 |
-| 正式DSL SHA-256 | e389dcd26e401323e4d6a85c709163158ac0b12dec18a708258e9f008830e8c5，workflows/safety-assessment.yml，无密钥 |
+| 原阶段D实测DSL历史SHA-256 | e389dcd26e401323e4d6a85c709163158ac0b12dec18a708258e9f008830e8c5；当时含实例绑定、无密钥；当前safety-assessment.yml已去实例绑定，不再具有此哈希 |
 | 临时证据服务入口 | 用户配置的Cloudflare Quick Tunnel；实际地址和进程记录见data/quick_tunnel/runtime.json，Dify端HTTPS健康检查已通过 |
 | Dify节点契约参考 | tag 1.17.1 的 graphon==0.7.0；只下载wheel阅读源码，未将其安装到证据服务依赖中 |
 | 视觉模型参数参考 | 官方siliconflow插件qwen3.5-27b.yaml，Git blob c5aa85ed1271fef6473bb3e002467d7d237dfcb5；声明vision和enable_thinking，已与云端UI及单步调用核对 |

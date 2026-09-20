@@ -1,122 +1,134 @@
-# 本地标准复核与设备评估测试台
+# 门户运行手册 · 从空源码目录到首份报告
 
-本入口是用户明确授权的阶段 D 扩展。使用真实 MinerU 和 Dify Cloud；没有离线演示报告。现有 `app.main`、旧 `.env`、阶段 D v3 工作流和五张证据业务表继续兼容。
+这是 Windows 开发者预览版的推荐运行路径。准备清单和数据传输边界见 [README](../README.md)。首次运行按下列顺序完成一次；页面启动后，配置变化使用“应用草稿”，不要重复启动。
 
-## Windows 初始化
+## 1. 初始化并启动一次
 
-需要 PowerShell 7、Python 3.12、Git；不需要 Node 前端构建、Redis 或 Docker。首次下载 MinerU 权重需要网络和磁盘空间。解析环境与轻量 API 环境分离。
+在解压后的项目根目录，用 PowerShell 7 执行：
 
 ```powershell
+pwsh --version
+py -3.12 --version
 pwsh -File deploy/init-portal.ps1 -InstallMinerU
 pwsh -File deploy/start-portal.ps1
 ```
 
-`init` 使用 `uv.lock` 安装工作区 `.venv`；MinerU 使用 `ingestion/mineru-requirements.txt` 安装 `.venv-mineru`。已存在的 `.env.portal` 不覆盖。新配置只生成本机证据服务密钥，不复制开发者的业务凭据。
+预期：创建本目录 `.venv` 与独立 `.venv-mineru`，按锁文件安装依赖，生成 `.env.portal` 和空数据，然后提示 `http://127.0.0.1:8001` 可打开。没有云端密钥时也能打开向导；尚未发布知识版本时证据服务 `/health` 返回 `503 not_ready` 属预期。
 
-打开 `http://127.0.0.1:8001`，点击“首次配置与诊断”，按本机环境 → 专用知识库 → HTTPS → Dify 工作流 → 检查与首测操作。首次没有云端配置也能打开页面。环境安装失败时，打开 `data/portal-runtime/startup-bootstrap.html`；Python 已运行时另有 `startup-diagnostics.html`。页面日志入口只能在服务启动后使用。
+失败入口：终端错误 → `data/portal-runtime/startup-bootstrap.html` →（Python 已运行时）`startup-diagnostics.html` / 服务日志。原文件不存在时说明尚未走到对应启动阶段。第一次解析需下载模型资源，硬件和网络问题看解析日志，不用全局 Python 或 pytest 替代项目环境。
 
-页面将配置写到项目根目录 `.env.portal`，与旧 `.env` 完全独立。密钥输入提交后清空，读取接口不回显，浏览器不持久化；空密码框保留已有值。新证据密钥须在保存前复制并妥善暂存，应用后填到 Dify Secret。密钥不进入 DSL、Git 或源码包。
+`init` 不覆盖已有 `.env.portal`。若已按 README 路径 A 初始化，带 `-InstallMinerU` 再运行只补齐环境；若服务已运行，跳过启动命令。门户固定8001、独立证据服务8002，都监听127.0.0.1；旧8000试点不参与本流程。
 
-“保存草稿”只生成 `.env.portal.draft`；可先检查草稿，再点击“应用草稿并重启后台服务”。只有任务空闲时允许应用，门户页面保留运行，worker 和证据服务重启后自动重连。外部配置修改会触发冲突而不是被覆盖；失败保留草稿并尝试恢复本次写入。环境变量覆盖会显示在字段旁，不能在页面覆盖。已有知识版本的数据目录不能换库。
+## 2. 向导：本机环境
 
-| 配置 | 用途 |
+打开“00 首次配置与诊断 → 1 本机环境”。默认 MinerU 路径为 `.venv-mineru/Scripts/mineru-kit.exe`；也可选择已验证的独立 MinerU 环境。文件限额默认为50 MiB/300页，解析超时7200秒。
+
+页面配置的通用操作是：填写 → **保存配置草稿** → **应用草稿并重启后台服务** → **检查已应用配置**。草稿写入 `.env.portal.draft`，应用前不改变运行配置；应用时只重启证据服务和worker，门户与其托管隧道保持运行。只有任务空闲时可应用。外部文件修改会触发冲突，环境变量覆盖项不能从页面覆盖。
+
+密码框留空保留已有密钥，保存后清空且不回显。新生成的证据密钥在保存前复制并妥善暂存，步骤4用于Dify Secret；也可由本人从本机 `.env.portal` 取值，勿把它发到聊天、Git或诊断附件。若重新生成替换密钥，应用后必须同步Dify并发布。
+
+成功标志：解析器版本、两份数据库和worker心跳诊断通过。此时云端项仍未配置是正常的。失败看“查看本机服务日志”。
+
+## 3. 向导：专用知识库
+
+1. 打开 [Dify 知识库](https://cloud.dify.ai/datasets)，创建**空白专用知识库**。不要复用别人的试点库或含未知文档的库。
+2. 在Dify配置可用的嵌入模型。默认适配提供方 `langgenius/siliconflow/siliconflow`、模型 `Qwen/Qwen3-Embedding-4B`；模型凭据只在Dify管理。
+3. 创建只授权该库的Knowledge API Key。在向导“2 专用知识库”填写Service API地址（Cloud通常为 `https://api.dify.ai/v1`）、库ID或库页面网址、密钥、嵌入提供方和模型ID，保存并应用。
+4. 点击“初始化空白专用知识库”，等待任务成功。已有资料时此操作拒绝修改。
+
+成功标志：知识库真实鉴权、模型配置、`rag_snapshot_id`字符串元数据及文档归属检查通过。初始化设置High Quality、Hybrid Search、语义/关键词各0.5、Top-5。失败看该任务诊断；401检查密钥，403检查库授权及模型权限。
+
+每个实例的数据目录、知识库和工作流独立。已有发布版本时禁止直接换库；新开发者应在自己的源码目录初始化，不能只复制另一实例的API Key或远端文档。
+
+## 4. 向导：HTTPS 与 Dify 工作流
+
+### 4.1 给8002建立HTTPS入口
+
+使用自有HTTPS时，将其仅转发到 `127.0.0.1:8002`。使用Quick Tunnel时：
+
+1. 从向导“3 HTTPS入口 → 安装指定版本工具”下载官方cloudflared 2026.9.1 Windows x64；保存到环境步骤显示的路径，默认 `data/tools/cloudflared/2026.9.1/cloudflared.exe`。启动会验证固定SHA-256。
+2. 确认证据密钥已配置，点击“启动本实例隧道”。出现连接状态和新地址后，点“填入新地址”，保存并应用。
+3. 在“5 检查与首测”检查本机和HTTPS证据服务鉴权。进程显示已连接不代替HTTPS检查。
+
+失败入口：隧道任务诊断/服务日志。检测到用户已有 `.cloudflared/config.yml` 或 `config.yaml` 时不会覆盖它，应使用自有HTTPS或独立环境。页面只管理 `data/portal-runtime/managed-tunnel.json` 登记的进程，不接管其他隧道。8001上传和复核页面不接公网。
+
+### 4.2 导入专用门户Workflow并启用API
+
+1. 在Dify配置可用的视觉/评估模型。默认提供方 `langgenius/siliconflow/siliconflow`，模型 `Qwen/Qwen3.5-27B`，两个LLM节点都使用它且 `enable_thinking=false`。向导模型字段需与Dify实际设置一致；更换模型后重新验收。
+2. 在向导“4 Dify工作流”保存并应用模型字段，点击**下载当前已应用配置的DSL**，导入一个新的专用Workflow。它带有自己的知识库、HTTPS和模型绑定，Secret为空。
+3. 核对原生检索节点的知识库，两个LLM节点图片变量均为 `start.images`，检索按 `rag_snapshot_id = start.snapshot_id` 过滤。切换模型后再核对图片绑定。
+4. 发布服务API并停用公开Web App。若Dify在首次发布前不能关闭Web App：**保持证据Secret为空、尚无已发布知识版本 → 首次发布 → 立即停用Web App → 填入证据Secret → 再发布更新**。每次发布后都复查Web App停用、后端API启用。
+5. 在该应用环境变量中设置 `EVIDENCE_API_BASE_URL` 为本实例HTTPS地址，`EVIDENCE_API_TOKEN` Secret为本机同值。创建该应用自己的Workflow API Key，填回门户；可粘贴编排页面网址作为应用ID，保存并应用。
+6. 回到向导，逐项记录已核对的人工确认，运行“检查已应用配置”。
+
+成功标志：Workflow鉴权和**已发布**输入契约通过。Knowledge Key与Workflow Key不能互换；后者在本轮Cloud实例中以 `app-` 开头，实际鉴权结果才是依据。缺失权限、Secret未绑定、模型被停用等问题要根据失败项修复。
+
+门户Workflow保留七个输入：`images`、`equipment_type`、`equipment_description`、`operating_state`、`work_context`、`same_equipment_confirmed`、`snapshot_id`。最后一项由本机后端固定，设备评估页面不要求手工填写。**不要给门户导入旧版 `safety-assessment.yml`**，它是六输入的历史单快照结构。
+
+## 5. 上传、复核并发布第一版
+
+跟随 [首次测试示例](first-test.md) 准备自己的PDF和标注：
+
+1. 上传完整、未加密的国家标准PDF。系统验证大小/页数并按SHA-256归档；同文件复用既有任务。后台固定 `--pages all --format zip --tier standard --ocr-mode auto`，不启用远程解析。
+2. 解析任务完成后进入“对照复核”，确认完整页覆盖。填写标准号、完整名称、版本、适用范围、状态、核验日期和可核查来源；输入真实复核人。
+3. 按条款筛选/搜索，对照原页检查原文、数值、单位、否定词、来源块、跨页、图表及必要上下文。依赖选择器显示条款号和摘要，UID由系统处理。修改先保存，再逐项确认并批准；机器候选不会自动批准。
+4. 勾选标准，预览已批准且依赖闭合的集合。未知边界、缺失资产、重复身份、未批准依赖等问题必须先处理。同标准/版本会整体替换该标准的旧集合，页面列出替换明细并要求确认。
+5. 用表单填写检索问题并勾选预期条款，填写复核人，执行“建立索引、自检并发布”。至少一道可回答题；可另加无答案题，高级JSON仅供已有标签导入。
+
+成功标志：索引、分块、元数据和映射回读一致，检索Top-5命中率≥0.9且没有技术错误，发布任务成功，页面出现当前知识版本。无答案题可能仍有相似候选，不能将此解释为有正确答案。
+
+失败入口：发布预览阻塞项或该任务“诊断与日志”的检索明细。不得为通过门禁随意改变预期答案。编辑已批准原文或依赖会撤销相关批准；未知边界和缺失资产不会自动补齐。内容完全未变时不重复发布。
+
+## 6. 图片、工况与报告
+
+按[示例](first-test.md#图片和工况示例)选取1～4张同设备JPEG/PNG（每张≤5MiB），检查预览顺序，填写工况；不知道的状态写“未知”，确认同设备后提交。只有已发布版本才能评估，提交时后端冻结该版本，不随后续发布改变。
+
+成功标志：任务成功，页面展示待专业人员复核的六项检查、适用条件、证据和待确认事项；可下载Markdown/JSON。只有Workflow输出report_id且本机HTTP/SQLite回读、请求/图片顺序/版本一致时才展示报告。
+
+失败入口：该评估任务的诊断、失败节点与运行ID；不会以旧报告冒充本次结果。记录真实运行，不把测试夹具或仅HTTP200当成完整报告验收。原图会参与两个模型节点，参考README的数据去向后选择适合上传的材料。
+
+## 诊断与排错
+
+| 检查或现象 | 说明与处理 |
 |---|---|
-| PORTAL_KNOWLEDGE_API_KEY / PORTAL_DATASET_ID | 仅限专用知识库的 Service API 密钥与 ID |
-| PORTAL_WORKFLOW_API_KEY | 专用 Workflow 应用的 API 密钥，与知识库密钥不同 |
-| PORTAL_EVIDENCE_API_TOKEN | init 生成的服务端 Bearer 密钥，同值绑定 Dify Secret |
-| PORTAL_EVIDENCE_PUBLIC_URL | Dify 可访问的证据 HTTPS 地址，只转发到 127.0.0.1:8002 |
-| PORTAL_DATA_ROOT | 默认为 data/portal；开发者之间不共享 SQLite 目录 |
-| PORTAL_MAX_PDF_BYTES / PORTAL_MAX_PDF_PAGES | 默认为 50 MiB / 300 页，可调 |
+| 只读诊断 | 验证解析器、数据库、worker、知识库鉴权/模型/元数据/归属、Workflow `/info`和`/parameters`、本机/HTTPS鉴权；不调用模型或写业务证据 |
+| 人工确认 | API不能证明Dify内部Secret和所有图绑定正确；须在Dify逐项核对，页面单独记录其来源 |
+| 真实链路项待验证 | 首份报告成功保存并回读后才通过；云端配置以后变化仍需重新实测 |
+| 配置结果过期 | 按配置指纹标记stale，重新诊断；草稿轮换证据密钥时鉴权须应用后再测 |
+| 401 / 403 / 429 | 对应密钥、权限/模型可用性、限流/额度；按详情及Retry-After处理，不连续新建评估 |
+| TLS / 隧道失败 | 核对进程、地址及网络；临时地址变化后同步本机和Dify并发布，不关闭TLS验证 |
+| 解析失败 | 查看任务中的有限parser.log；核对独立环境、资源和完整PDF，修复后恢复原任务 |
+| 远端文档归属错误 | 对照本地同步清单与远端文档，不自动删除未知文档或绕过映射 |
 
-## 专用 Dify 环境
+“查看诊断与日志”提供阶段、错误代码、字段、请求/运行ID、有限节点事件与日志；可刷新并下载脱敏ZIP。ZIP不收录配置密钥、PDF、图片、数据库、报告正文和原始模型输入输出。分享排错材料时提供该ZIP、源码提交及复现步骤。
 
-每个开发者在自己的 Dify 工作区创建一个空白专用知识库，使用只授权该库的密钥。当前适配器参考 Dify 1.17.1 官方源码；云实例版本由平台控制。若需要使用不同嵌入模型，应同时配置知识库及 Workflow 检索节点并重新真实验收。
+## 停止与恢复
 
-把知识库 ID 或其控制台网址、专用密钥、模型配置填入向导，保存并应用后点击“初始化空白专用知识库”。它由 worker 执行，仅操作空库；已有文档时拒绝修改。命令行等效入口：
-
-```powershell
-.\.venv\Scripts\python.exe -X utf8 -m app.portal.cli configure-empty-dataset
-```
-
-该命令只操作空知识库，配置 High Quality、Hybrid Search、语义/关键词各 0.5、Top-5，以及字符串元数据 `rag_snapshot_id`。默认沿用已验证的 Qwen/Qwen3-Embedding-4B 与 SiliconFlow 插件；可用 `--embedding-model`、`--embedding-provider` 指定实际可用模型。
-
-启动本机服务：
-
-```powershell
-pwsh -File deploy/start-portal.ps1
-```
-
-页面位于 `http://127.0.0.1:8001`，证据服务位于 `http://127.0.0.1:8002`，单独 worker 执行长任务。服务进程与日志在 `data/portal-runtime` 登记。停止脚本会验证 PID 和创建时间，不影响旧 8000 服务：
+任务结束后运行：
 
 ```powershell
 pwsh -File deploy/stop-portal.ps1 -WhatIf
 pwsh -File deploy/stop-portal.ps1
 ```
 
-有运行任务时默认拒绝停止；确需中断可使用 `-Force`，下次启动会标记为已中断，由任务页恢复/对账。普通页面关闭不会中断工作。若操作系统意外终止 worker 且遗留 MinerU 子进程，先在任务管理器核对并停止该任务的解析进程，再恢复解析；每次解析使用独立目录。
+脚本核对PID及创建时间，默认拒绝中断运行任务；关闭页面不停止服务。确需中断时管理员可使用 `-Force`，下次启动会标记未完成任务，先查状态再恢复。
 
-在向导 HTTPS 步骤安装链接指向的官方 cloudflared 2026.9.1 Windows x64 工具，放在环境步骤指定的位置，页面会在启动前校验固定 SHA-256。点击启动后，只转发 **8002 证据服务**，再点“填入新地址”、保存并应用。也可直接填自有 HTTPS。
+已停止后，重新执行第1步中的**启动命令一次**。完整停止会结束门户托管隧道，需要重新建立临时地址，并在本机/Dify两侧更新和发布。配置应用只重启worker/证据服务，会保留该隧道。
 
-页面仅管理 `data/portal-runtime/managed-tunnel.json` 登记的进程，不接管原来的外部隧道。配置应用时隧道保留；完整停止门户会一并结束托管隧道。重新启动后地址变化，须同步 Workflow 的 `EVIDENCE_API_BASE_URL` 并发布。状态只证明进程/隧道连接，HTTPS 访问和鉴权另由实际诊断验证。有 `.cloudflared/config.yml` 或 `config.yaml` 时不会覆盖全局配置，应使用自有 HTTPS 或独立环境。8001 始终留在回环地址。
+评估已取得运行ID时恢复只对账原运行；已提交但未取得ID时需在Dify日志人工核对，禁止自动重复提交。索引创建响应丢失时依据确定性文档名和本机 `data/portal/manifests` 对账，不删除清单盲目重跑。解析进程或同步锁异常残留时，先核对所属进程和任务，再处理具体残留，不覆盖数据库。
 
-向导的 Workflow 步骤可以直接下载按已应用/草稿配置生成的无密钥 DSL；命令行等效入口：
+## 命令行对照与开发资料
 
-```powershell
-.\.venv\Scripts\python.exe -X utf8 -m workflows.build_portal
-```
+以下是页面动作的**替代入口**，不属于首次流程中需要重复执行的步骤：
 
-将生成的 `data/portal/workflows/portal.candidate.yml` 导入一个**新的** Workflow。保留旧阶段 D 应用。新应用使用 portal-v1、输入 `snapshot_id` 和原生检索节点的手动等值元数据过滤。
+| 用途 | 项目根目录命令 |
+|---|---|
+| 实际只读诊断 | `pwsh -File deploy/doctor-portal.ps1` |
+| 初始化空白专用库 | `.\.venv\Scripts\python.exe -X utf8 -m app.portal.cli configure-empty-dataset` |
+| 按本机配置生成门户DSL | `.\.venv\Scripts\python.exe -X utf8 -m workflows.build_portal`；输出到运行时生成的 `data/portal/workflows/portal.candidate.yml` |
+| 代码测试 | `.\.venv\Scripts\python.exe -X utf8 -m pytest -q` |
+| 导出源码 | 干净Git工作区执行 `pwsh -File deploy/export-source.ps1` |
 
-无环境绑定的结构模板另见 `workflows/portal.template.yml`。生成器支持 `--model-provider`、`--model`、`--embedding-provider`、`--embedding-model`；检索节点中的嵌入配置必须与实际知识库一致。
+仓库 [门户结构模板](../workflows/portal.template.yml) 不含实例绑定，用于源码阅读；CLI或页面才生成当前环境候选。模型/嵌入参数默认读取本机配置；详细接口见 [Portal API](portal-api.md)，协作与发布要求见 [CONTRIBUTING](../CONTRIBUTING.md)。文中所有 `data/` 路径均由运行产生，不是源码包预置资产。
 
-在 Dify 管理页面将本机证据密钥保存为 `EVIDENCE_API_TOKEN` Secret；将 HTTPS 绑定 `EVIDENCE_API_BASE_URL`。确认两个视觉节点绑定同一 `start.images`，默认模型均为 Qwen/Qwen3.5-27B，`enable_thinking=false`。完成发布 API 的设置并**关闭公开 Web App**，然后在向导填写该应用自己的 API Key 并应用。产品运行只使用官方 Service API；不会读取控制台 Cookie 或自动操作浏览器。
-
-当前 Cloud UI 发布前不开放访问控制。实测采用先保持 Secret 为空、知识版本未发布，发布后立即关闭 Web App，再绑定 Secret 并发布更新的顺序；每次更新后复查 Web App 停用、后端 API 启用。不要把 Knowledge API Key 填入 Workflow API Key；本轮创建的应用密钥以 `app-` 开头。
-
-首次入库前 `/health` 为 `503 not_ready` 是预期；可以正常解析和复核 PDF。至少发布一个版本后才接受评估。
-
-## 实际诊断的边界
-
-“检查已应用配置”逐项验证 MinerU 版本、数据库、worker 心跳、Knowledge API 鉴权、模型/版本元数据/远端文档归属、Workflow `/info` 与已发布 `/parameters`、本机和 HTTPS 证据服务鉴权。CLI `deploy/doctor-portal.ps1` 使用同一实现；诊断不调用模型、不创建索引、上下文或报告。结果随配置指纹过期，明确失败项会阻止相应解析/发布/评估操作。草稿更换证据密钥时，鉴权标为待应用复检。
-
-七个 Workflow 输入保持 `images`、`equipment_type`、`equipment_description`、`operating_state`、`work_context`、`same_equipment_confirmed`、`snapshot_id`，没有诊断分支。API 检查不能证明 Dify 内部 Secret、模型权限或回调正常；向导单列人工确认和真实报告验证。只有同配置成功保存并回读报告后，才显示其已有真实验证记录；云端绑定以后变更仍应重新实测。
-
-## 上传、复核和发布
-
-1. 页面上传一份本地国家标准 PDF。校验 PDF 内容、加密、大小、页数并归档 SHA-256；相同文件复用既有任务与复核记录。MinerU 固定 `--pages all --format zip --tier standard --ocr-mode auto`，不自动使用远程解析或其他档位。
-2. 等待任务完成后打开“对照复核”。左侧显示原 PDF 的本地逐页预览，支持切页及打开原文件；右侧按待复核/已批准/边界/资产问题筛选与搜索。用可读条款号和原文摘要选择来源块、必要上下文，不必手工复制 UID；开发者详情仍保留身份字段。支持拆分/合并、保存并下一条。
-3. 填写真实复核人，并逐项确认文本、边界、上下文、图表与范围。机器产物保持待复核；修改已批准文本或其依赖会撤销相关批准。来源资产缺失、页覆盖不完整及未知边界不能直接批准。标准状态与来源由维护人员填写，系统不替代适用性判断。
-4. 勾选标准并预览新版本。允许只发布已批准且依赖闭合的子集，页面显示剩余待复核条款数。同标准号/版本会整体替换旧条款集合，须显式确认；其他标准累积保留。
-5. 在表单中填写检索问题，勾选预期命中的条款；可增加无答案题。至少一项可回答问题。高级 JSON 输入仍可用于已有标签导入。版本、自检复核人和时间由后端固定。预览会列出缺失依赖、循环、重复身份及同标准替换；阻塞未处理时不能发布。检索 Top-5 命中率至少 0.9 且无技术错误，分块/元数据/映射全部回读一致，才发布。
-
-`rag_snapshot_id` 是强制过滤条件；每一版保留独立文档及映射。同步也核对所有已登记历史分区，发现外来文档、元数据漂移或分块变化会失败，不会自动忽略。旧报告内原文保持不变。首版不自动清理历史版本，较多版本会增加索引存储和核验耗时。
-
-未保存的页面编辑会阻止批准；请先保存条款/元数据再确认。已批准内容与当前版本完全一致时，页面及后端阻止重复发布。拆分后需要人工分别设置条款号与来源位置，不能保留重复身份。
-
-## 设备评估与失败恢复
-
-选择 1～4 张同设备 JPEG/PNG，每张 ≤5 MiB，填写工况并确认同设备。后端在提交时固定知识版本；上传图片和执行 Workflow 使用同一个由后端生成的 `user`。SSE 仅在服务端消费，页面轮询有限任务状态。
-
-先按页面“首次测试”指引准备一张整体图及必要细节图。当前只支持普通卧式金属车床；不同设备不能混用，不确定的通电、人员接近或联锁状态填“未知”。预览卡支持移除和调整顺序，实际提交遵循卡片顺序。每份报告页面列出六项检查、证据引用与待确认事项。
-
-连接中断后，已取得运行 ID 的任务查询原运行；未取得运行 ID 的已提交请求禁止自动重发，需在 Dify 运行记录核对。失败任务不会展示上一份成功报告。要发起一次新的评估，重新提交新任务；恢复按钮只恢复原任务。
-
-只有 Workflow 成功返回 `report_id`，且通过证据服务 GET 回读、请求/图片/版本/状态与本机持久化一致性检查，页面才展示报告。所有报告 `pending_review`，可以下载 Markdown/JSON，仍需专业复核。
-
-创建文档响应丢失时，同步清单会先按确定性名称对账。存在同名重复或无法确认创建结果时停止；请对照 `data/portal/manifests` 与 Dify 文档列表排查，不直接删除远程数据。`.lock` 文件残留时，先确认没有运行中的发布任务，再按文件记录核查旧进程，手工处理该锁文件。
-
-任一失败均在页面给出错误代码、字段/阶段、请求或运行 ID 与处理建议。任务页“查看诊断与日志”提供有限解析日志、检索自检、Dify 节点进度/错误，并可刷新和下载脱敏 ZIP。ZIP 不含原始请求、模型输入输出、PDF、图片、数据库或报告正文；日志先脱敏再截断。401 核对密钥，403 核对权限/模型，429 按限流提示等待；TLS/隧道失败应修复连通性，不关闭证书验证。需要协作排错时交付诊断包和复现步骤，不发送 `.env.portal`。
-
-## 本地验证与交付
-
-```powershell
-.\.venv\Scripts\python.exe -X utf8 -m pytest -q
-git diff --check
-pwsh -File deploy/export-source.ps1
-```
-
-源码包来自 Git HEAD，位于 dist；只包含已跟踪源码、锁文件、无密钥模板和测试夹具。不包含 PDF、解析包、模型权重、数据库、设备照片、报告、虚拟环境或 `.env.portal`。实际通过/未通过项见 `docs/acceptance.md`，不要把 fixture 测试当成真实模型验收。
-
-当前单机、单 worker、可信本地用户设计，没有账号体系或多租户隔离；不要部署为团队公网服务。团队共用、更多设备、知识规模优化和阶段 E 业务准确性评估需要单独设计和验收。
-
-接口依据：[Workflow API](https://docs.dify.ai/en/api-reference/workflow-runs/run-workflow)、[文件上传](https://docs.dify.ai/en/api-reference/files/upload-file)、[元数据字段](https://docs.dify.ai/en/api-reference/metadata/create-metadata-field)、[文档元数据](https://docs.dify.ai/en/api-reference/metadata/update-document-metadata-in-batch)、[固定版本检索契约](https://github.com/langgenius/dify/blob/1.17.1/api/services/entities/knowledge_entities/knowledge_entities.py)。
+项目只面向可信本地用户。已有真实技术验证及未验证范围见 [验收记录](acceptance.md)，依赖/云实例参考版本见 [版本基线](versions.md)。
