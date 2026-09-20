@@ -18,8 +18,8 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 | GET /api/setup/service-logs | 已登记服务的有限脱敏日志 |
 | GET /api/diagnostics | source=active/draft；返回最近诊断及 stale 标记 |
 | POST /api/diagnostics | source、draft_id；返回任务 ID；逐项只读检查，不调用模型 |
-| POST /api/documents | multipart `file`；返回 document_id、页数、状态、是否复用 |
-| GET /api/documents | 文件、页数、批准/候选计数、状态 |
+| POST /api/documents | 仍为单个multipart `file`；返回document_id、页数、状态、是否复用及parse_job摘要；批量由前端逐份调用 |
+| GET /api/documents | 文件、页数、批准/候选计数、状态、full_document_covered及parse_job；此列表不截断为100项 |
 | GET /api/documents/{id} | 完整记录、来源、revision、图表链接及assistance；可选baseline_id指定同标准/版本的批准基准 |
 | POST /api/documents/{id}/review/{apply_context/approve_batch} | revision、review_hash、actor、candidate_ids（1～100）、可选baseline_id；批准需五项acknowledgements；单事务保存 |
 | GET /api/review/options | 各标准候选条款的可读选择项与身份，供上下文选择器使用 |
@@ -53,3 +53,5 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 `portal.db` 的 documents/jobs/releases/state/review_audit/job_events 与 `evidence.db` 五张业务表分离。GET 单个任务额外返回阶段历史 events；恢复任务不删除既有错误记录，历史中不包含原始 SSE 或密钥。PDF、解析及导出保存在配置的数据根目录。门户证据服务只接受同时在 releases 登记且证据库 active 的知识版本；旧服务继续使用单一 ACTIVE_SNAPSHOT_ID。
 
 规则辅助信息独立于ClauseRecord，包含metadata_draft及来源、文档检查、每条issues/分组/层级/上下文建议/数字单位片段/diff、基准及review_hash。它不赋予批准状态；批量确认哈希涵盖当前payload、基准和规则检查，外部归档/资产变化也会阻止沿用。相同SHA上传保留原文档和批准；不同文件只提供对照，新来源仍需人工确认。问题确认进入发布任务的case_review，原人工cases结构保持兼容；draft_前缀保留给规则草稿，缺少case_draft_id时拒绝执行。
+
+批量队列复用原接口，不新增批量写端点。parse_job含id/status/stage/error/updated_at（无关联任务时为null），错误按当前配置脱敏，不返回任务payload。单文件失败使用原POST /api/jobs/{id}/retry；原任务ID和错误历史保留。GET /api/jobs仍是最近100项，文档行和批次状态依据完整文档清单的解析摘要，不依赖任务总览搜索。

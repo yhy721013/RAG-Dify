@@ -333,6 +333,14 @@ if (typeof window !== "undefined")
           card.append(progress);
         }
         addError(card, row.error, "");
+        if (row.phase === "upload_failed")
+          card.append(
+            element(
+              "p",
+              "临时故障可只重试此项；文件内容需修正时，移出后重新选择修正版。移出仅清理页面选择，不删除磁盘文件。",
+              "hint",
+            ),
+          );
         addError(card, row.parse_job?.error, "解析原因：");
         if (
           ["failed", "interrupted", "needs_attention"].includes(

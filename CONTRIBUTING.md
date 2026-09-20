@@ -27,3 +27,5 @@ git diff --check
 发布说明应注明“Windows 开发者预览版”、源码提交与ZIP SHA-256、测试环境和结果、是否重新运行了真实Dify流程、六项检查范围及剩余限制。只从干净HEAD导出；接收者按README验证，不能依赖开发机的 `data/`。公开模板的HTTPS、dataset和snapshot绑定保持占位值；历史Git对象仍可能包含旧实例标识，当前模板去绑定不等于重写了历史。发布公开Git仓库前单独审查历史，不能只检查ZIP。
 
 回滚以 Git 代码提交为单位。新前端数据目录与旧试点隔离；备份 `.env.portal`、data/portal 与原始资料后再升级。不要用覆盖数据库的方式回滚已保存证据或报告。历史索引版本暂不自动清理。
+
+批量上传队列另有纯JavaScript状态/拖放事件回归 `tests/js/test_upload_queue.cjs`，由pytest在检测到Node时调用；没有Node时会明确跳过这一项，门户运行和Python接口测试不依赖Node。修改上传前端时应安装可用Node并运行该测试，或执行内置浏览器验证；不要把事件模拟称为操作系统文件管理器真实拖拽验证。
