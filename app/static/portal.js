@@ -944,10 +944,12 @@ function renderCandidateFilter(preferred = selectedCandidate) {
       ? preferred
       : rows[0].id;
     fillCandidate();
-  }
+  } else selectedCandidate = "";
   $("#candidate-form").hidden = !rows.length;
   $("#acknowledgements").hidden = !rows.length;
   $("#approve-clause").disabled = !rows.length;
+  $("#split-clause").disabled = !rows.length;
+  $("#merge-clause").disabled = !rows.length;
 }
 for (const id of ["candidate-filter", "candidate-search"])
   $("#" + id).addEventListener(
@@ -1290,7 +1292,8 @@ $("#equipment-images").addEventListener("change", () => {
   ) {
     message("请选择 1～4 张 JPEG/PNG，每张不超过 5 MiB。", true);
     $("#equipment-images").value = "";
-    selectedImages = []; renderImages();
+    selectedImages = [];
+    renderImages();
     return;
   }
   selectedImages = files;
@@ -1342,7 +1345,18 @@ async function openTaskDiagnostics(id) {
       "p",
       `任务 ${id} · ${stages[data.stage] || data.stage} · ${labels[data.status] || data.status}`,
     ),
+    element(
+      "p",
+      `本次读取：${new Date(data.generated_at).toLocaleString()}；日志为有限快照。`,
+      "hint",
+    ),
   );
+  const refreshLog = element("button", "刷新此任务诊断", "secondary");
+  refreshLog.type = "button";
+  refreshLog.addEventListener("click", () =>
+    run(() => openTaskDiagnostics(id), refreshLog),
+  );
+  root.append(refreshLog);
   if (data.error?.message) {
     root.append(element("p", data.error.message, "notice warning"));
     if (data.error.suggestion) root.append(element("p", data.error.suggestion));

@@ -7,14 +7,17 @@ import subprocess
 import sys
 import time
 import html
+from io import StringIO
 from datetime import datetime, timezone
 
 import httpx
+from dotenv import dotenv_values
 
 from app.errors import DomainError
 from app.portal.settings import PortalSettings, bootstrap_settings
 from app.portal.repository import PortalRepository
-from app.portal.setup import SetupManager, atomic_text
+from app.portal.setup import SetupManager, atomic_text, fingerprint
+from app.repository import digest
 from app.safe_diagnostics import public_error
 from app.settings import ROOT
 from ingestion.sync_dify import atomic_json
@@ -22,8 +25,6 @@ from ingestion.sync_dify import atomic_json
 
 def process_alive(entry):
     identity = int(entry["id"])
-    stamp = datetime.fromisoformat(entry["started_at"])
-    expected = stamp.strftime("%Y-%m-%dT%H:%M:%S")
     # 精确创建时间比较由 .NET 完成（Python datetime 仅保留六位小数）。
     source_stamp = entry["started_at"]
     if any(char not in "0123456789-:T.Z+" for char in source_stamp):
@@ -73,21 +74,31 @@ def apply_configuration(identity):
     config_before = manager.env.read_text(encoding="utf-8-sig") if manager.env.exists() else ""
     state_path = manager.runtime / "processes.json"
     candidate = config
-    stopped = False
+    services_touched = False
+    applied_text = None
     try:
         candidate, meta = manager.read_draft(identity)
+        draft_text = manager.draft.read_text(encoding="utf-8")
+        frozen = PortalSettings.from_values({**dotenv_values(stream=StringIO(draft_text)), **os.environ})
+        if fingerprint(frozen) != meta["fingerprint"] or digest(config_before) != meta["base_revision"]:
+            raise DomainError("configuration_conflict", "配置或草稿已在应用前变化，请重新保存")
         if store.state("maintenance") != identity:
             raise DomainError("configuration_conflict", "配置应用锁与请求不一致")
         state = json.loads(state_path.read_text(encoding="utf-8-sig"))
-        if {e["role"] for e in state["processes"]} != {"portal", "worker", "evidence"}:
-            raise DomainError("process_identity_error", "需要由启动脚本登记的完整服务进程")
+        roles = [e["role"] for e in state["processes"]]
+        if "portal" not in roles or len(set(roles)) != len(roles) or set(roles) - {"portal", "worker", "evidence"}:
+            raise DomainError("process_identity_error", "需要由启动脚本登记的本实例服务进程")
         atomic_json(manager.apply_path, {"id": identity, "status": "restarting", "fingerprint": meta["fingerprint"]})
         # 保留门户进程，以便在重启工作进程时继续显示状态；根目录/数据库不变。
         for entry in state["processes"]:
             if entry["role"] in {"worker", "evidence"}:
+                services_touched = True
                 stop_owned(entry)
-        stopped = True
-        atomic_text(manager.env, manager.draft.read_text(encoding="utf-8"))
+        if manager.file_revision() != meta["base_revision"]:
+            raise DomainError("configuration_conflict", "服务重启期间配置被外部修改，已保留该修改；请重新启动并核对")
+        atomic_text(manager.env, draft_text)
+        applied_text = draft_text
+        services_touched = True
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
         state["processes"] = [e for e in state["processes"] if e["role"] == "portal"]
         for role in ("evidence", "worker"):
@@ -107,17 +118,22 @@ def apply_configuration(identity):
                 time.sleep(.5)
             else:
                 raise DomainError("startup_failed", "应用后的证据服务或 worker 未就绪，正在恢复原配置")
+        if manager.file_revision() != digest(applied_text):
+            raise DomainError("configuration_conflict", "启动期间配置被外部修改，已保留该修改；请重新启动并核对")
         atomic_json(manager.apply_path, {"id": identity, "status": "succeeded", "fingerprint": meta["fingerprint"], "finished_at": datetime.now(timezone.utc).isoformat()})
         manager.draft.unlink(missing_ok=True)
         manager.meta.unlink(missing_ok=True)
     except Exception as error:
-        restored = True
+        restored = manager.file_revision() == digest(config_before)
         try:
-            atomic_text(manager.env, config_before)
+            # 只撤销本次写入；不能用旧副本覆盖编辑器或其他进程的新修改。
+            if applied_text is not None and manager.file_revision() == digest(applied_text):
+                atomic_text(manager.env, config_before)
+                restored = True
         except Exception:
             restored = False
         recovery_error = None
-        if stopped and restored:
+        if services_touched and restored:
             try:
                 state = json.loads(state_path.read_text(encoding="utf-8-sig"))
                 for entry in state["processes"]:
@@ -132,7 +148,8 @@ def apply_configuration(identity):
         atomic_json(manager.apply_path, {"id": identity, "status": "failed", "configuration_restored": restored,
             "error": public_error(error, (*config.secret_values(), *candidate.secret_values())), "recovery_error": recovery_error})
     finally:
-        store.set_state("maintenance", "")
+        if store.state("maintenance") == identity:
+            store.set_state("maintenance", "")
 
 
 def startup_report(error):
@@ -159,7 +176,8 @@ def start():
             if probe.connect_ex(("127.0.0.1", port)) == 0:
                 raise DomainError("port_in_use", f"端口 {port} 已被占用，未更改现有服务")
     from app.portal.worker import worker_lock
-    with worker_lock(PortalSettings.from_env().data_root / "worker.lock"):
+    config, configuration_error = bootstrap_settings()
+    with worker_lock(config.data_root / "worker.lock"):
         pass
     directory = ROOT / "data/portal-runtime"
     directory.mkdir(parents=True, exist_ok=True)
@@ -170,7 +188,7 @@ def start():
             raise DomainError("process_state_exists", "已有进程登记，请先执行 stop-portal.ps1 核对并停止旧进程")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     state = {"status": "starting", "processes": [], "portal_url": "http://127.0.0.1:8001"}
-    for role in ("portal", "evidence", "worker"):
+    for role in (("portal",) if configuration_error else ("portal", "evidence", "worker")):
         state["processes"].append(launch_role(role, directory, stamp))
         atomic_json(path, state)
     deadline = time.monotonic() + 15

@@ -6,7 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 from app.errors import DomainError
 
 PRIVATE_KEYS = {"authorization", "api_key", "access_token", "refresh_token", "secret", "password",
-                "headers", "inputs", "outputs", "prompt", "prompts", "reasoning", "reasoning_content"}
+                "headers", "inputs", "outputs", "prompt", "prompts", "messages", "reasoning", "reasoning_content"}
 
 
 def scrub(value, secrets=(), limit=6000):

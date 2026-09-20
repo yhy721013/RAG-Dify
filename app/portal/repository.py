@@ -87,7 +87,7 @@ class PortalRepository(Repository):
         with self.connect(write=True) as conn:
             if conn.execute("SELECT 1 FROM state WHERE key='maintenance' AND value<>''").fetchone():
                 return None
-            row = conn.execute("SELECT * FROM jobs WHERE status='queued' AND kind<>'diagnostics' ORDER BY created_at,id LIMIT 1").fetchone()
+            row = conn.execute("SELECT * FROM jobs WHERE status='queued' AND kind NOT IN ('diagnostics','tunnel') ORDER BY created_at,id LIMIT 1").fetchone()
             if not row:
                 return None
             conn.execute("UPDATE jobs SET status='running',updated_at=? WHERE id=?", (now(), row["id"]))
@@ -128,16 +128,16 @@ class PortalRepository(Repository):
                 raise DomainError("configuration_applying", "已有配置应用操作进行中", status=409)
             conn.execute("INSERT OR REPLACE INTO state VALUES('maintenance',?)", (identity,))
 
-    def recover(self, include_diagnostics=True):
+    def recover(self, include_controls=True):
         # 仅在取得操作系统独占 worker 锁后调用。
         with self.connect(write=True) as conn:
-            condition = "status='running'" + ("" if include_diagnostics else " AND kind<>'diagnostics'")
+            condition = "status='running'" + ("" if include_controls else " AND kind NOT IN ('diagnostics','tunnel')")
             conn.execute("INSERT INTO job_events(job_id,stage,status,error_json,created_at) SELECT id,stage,'interrupted','{}',? FROM jobs WHERE " + condition, (now(),))
             conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE " + condition, (now(),))
 
-    def interrupt_diagnostics(self):
+    def interrupt_controls(self):
         with self.connect(write=True) as conn:
-            conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE kind='diagnostics' AND status IN ('queued','running')", (now(),))
+            conn.execute("UPDATE jobs SET status='interrupted',updated_at=? WHERE kind IN ('diagnostics','tunnel') AND status IN ('queued','running')", (now(),))
 
     def retry(self, job_id):
         job = self.job(job_id)

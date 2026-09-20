@@ -8,7 +8,7 @@ if (-not (Test-Path -LiteralPath $portalStatePath)) { Write-Output '没有由启
 if (-not $Force) {
     Push-Location $portalRoot
     try {
-        & '.\.venv\Scripts\python.exe' -X utf8 -c 'from app.portal.settings import PortalSettings; from app.portal.repository import PortalRepository; import sys; s=PortalRepository(PortalSettings.from_env().db_path); sys.exit(1 if any(j["status"]=="running" for j in s.jobs()) else 0)'
+        & '.\.venv\Scripts\python.exe' -X utf8 -c 'from app.portal.settings import bootstrap_settings; from app.portal.repository import PortalRepository; import sys; s=PortalRepository(bootstrap_settings()[0].db_path); sys.exit(1 if s.path.is_file() and any(j["status"]=="running" for j in s.jobs()) else 0)'
         if ($LASTEXITCODE -ne 0) { throw '存在运行中任务；等待完成，或明确使用 -Force 中断。恢复后不会盲目重发工作流。' }
     } finally { Pop-Location }
 }

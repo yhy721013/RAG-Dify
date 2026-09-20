@@ -26,7 +26,7 @@ DATASET = "00000000-0000-4000-8000-000000000001"
 
 @pytest.fixture
 def environment(tmp_path):
-    config = PortalSettings(data_root=tmp_path / "data", app_env="test", dataset_id=DATASET,
+    config = PortalSettings(data_root=tmp_path / "data/portal", app_env="test", dataset_id=DATASET,
         dify_base_url="https://dify.invalid/v1", knowledge_api_key="dataset-synthetic-credential-12345",
         workflow_api_key="app-synthetic-credential-12345", evidence_api_token="synthetic-evidence-secret-12345",
         evidence_public_url="https://evidence.invalid", mineru_executable=tmp_path / "mineru-kit.exe")
@@ -130,6 +130,8 @@ def mock_services(config, *, forbidden=False):
                 return httpx.Response(403, json={"code": "rate_limit_exceeded", "message": config.knowledge_api_key}, headers={"Retry-After": "20"})
             if path.endswith("/metadata"):
                 return httpx.Response(200, json={"doc_metadata": [{"id": "field1", "name": "rag_snapshot_id", "type": "string"}]})
+            if path.endswith("/documents"):
+                return httpx.Response(200, json={"data": [], "page": 1, "total": 0, "has_more": False})
             return httpx.Response(200, json={"id": config.dataset_id, "name": "synthetic", "document_count": 0,
                 "indexing_technique": "high_quality", "embedding_model": config.embedding_model,
                 "embedding_model_provider": config.embedding_provider, "retrieval_model_dict": {"search_method": "hybrid_search"}})
@@ -155,7 +157,32 @@ def test_diagnosis_empty_library_is_connected_but_model_is_not_claimed_tested(en
     assert next(c for c in result["checks"] if c["id"] == "workflow.end_to_end")["status"] == "pending"
     assert next(c for c in result["checks"] if c["id"] == "evidence.https")["status"] == "pass"
     assert not any(secret in json.dumps(result) for secret in config.secret_values())
-    assert len(calls) == 8
+    assert len(calls) == 9
+
+
+def test_draft_token_change_waits_for_application_before_authentication(environment):
+    config, store, _ = environment
+    calls, transport = mock_services(config)
+    draft = replace(config, evidence_api_token="synthetic-new-evidence-key")
+    result = run_diagnostics(draft, store, active_config=config, transport=transport,
+        version_probe=lambda _: {"mineru_version": "4.0.2"})
+    checks = [row for row in result["checks"] if row["id"] in {"evidence.local", "evidence.https"}]
+    assert len(checks) == 2 and all(row["status"] == "pending" for row in checks)
+    assert result["gates"]["assess"] is False
+    assert not any("/reports/" in str(request.url) for request in calls)
+
+
+def test_diagnostic_rejects_foreign_documents_in_existing_library(environment):
+    config, store, _ = environment
+    _, normal = mock_services(config)
+    def handle(request):
+        if request.url.path.endswith("/documents"):
+            return httpx.Response(200, json={"data": [{"id":"foreign","name":"unregistered"}],"page":1,"total":1,"has_more":False})
+        return normal.handle_request(request)
+    result = run_diagnostics(config, store, transport=httpx.MockTransport(handle), version_probe=lambda _: {"mineru_version":"4.0.2"})
+    assert result["gates"]["publish"] is False and result["gates"]["assess"] is False
+    check = next(row for row in result["checks"] if row["id"]=="knowledge.ownership")
+    assert check["details"]["unknown_document_ids"] == ["foreign"]
 
 
 def test_diagnostics_distinguishes_forbidden_rate_limit_and_preserves_reason(environment):
@@ -216,3 +243,62 @@ def test_setup_api_does_not_expose_secrets_or_allow_csrf(environment):
         dsl = client.get("/api/setup/workflow.yml?source=draft&draft_id=" + response.json()["id"])
         assert dsl.status_code == 200 and not any(secret in dsl.text for secret in config.secret_values())
         assert "portal-v1" in dsl.text and "diagnostic_mode" not in dsl.text
+
+
+def test_worker_does_not_own_portal_control_processes(environment):
+    _, store, _ = environment
+    tunnel = store.enqueue("tunnel", {"action": "start"})
+    diagnostic = store.enqueue("diagnostics", {"source": "active"})
+    parse = store.enqueue("parse", {"document_id": "synthetic"})
+    assert store.claim()["id"] == parse["id"]
+    assert store.claim() is None
+    store.progress(tunnel["id"], "tunnel")
+    store.progress(diagnostic["id"], "diagnosing")
+    store.recover(include_controls=False)
+    assert store.job(tunnel["id"])["status"] == "running"
+    assert store.job(diagnostic["id"])["status"] == "running"
+
+
+@pytest.mark.parametrize("change_during", ["stop", "launch", "none"])
+def test_apply_preserves_concurrent_edits_and_rolls_back_own_changes(environment, monkeypatch, change_during):
+    from app.portal import services
+    config, store, manager = environment
+    original = manager.env.read_text(encoding="utf-8")
+    meta = manager.save({"max_pdf_pages": "120"}, manager.file_revision())
+    manager.begin_apply(meta["id"])
+    processes = {"processes": [{"role": role, "id": index} for index, role in enumerate(("portal", "evidence", "worker"))]}
+    (manager.runtime / "processes.json").write_text(json.dumps(processes), encoding="utf-8")
+    monkeypatch.setattr(services, "bootstrap_settings", lambda: (config, ""))
+    monkeypatch.setattr(services, "SetupManager", lambda *_: manager)
+    external = original + "# concurrent external edit\n"
+    def stop(entry):
+        if change_during == "stop":
+            manager.env.write_text(external, encoding="utf-8")
+    launched = []
+    def launch(role, *_):
+        launched.append(role)
+        if len(launched) == 1:
+            if change_during == "launch":
+                manager.env.write_text(external, encoding="utf-8")
+            raise RuntimeError("synthetic launch failure")
+        return {"role": role, "id": len(launched) + 100}
+    monkeypatch.setattr(services, "stop_owned", stop)
+    monkeypatch.setattr(services, "launch_role", launch)
+    services.apply_configuration(meta["id"])
+    result = json.loads(manager.apply_path.read_text(encoding="utf-8"))
+    assert result["status"] == "failed" and store.state("maintenance") == ""
+    assert manager.env.read_text(encoding="utf-8") == (original if change_during == "none" else external)
+    assert result["configuration_restored"] is (change_during == "none")
+    assert manager.draft.exists()  # 可重新保存，失败不会悄悄删除草稿。
+    assert len(launched) == {"stop": 0, "launch": 1, "none": 3}[change_during]
+
+
+def test_bootstrap_retains_identity_when_numeric_config_is_invalid(environment, monkeypatch):
+    from app.portal import settings
+    config, _, manager = environment
+    manager.env.write_text(manager.env.read_text(encoding="utf-8") + "PORTAL_MAX_PDF_PAGES=invalid\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "ROOT", manager.root)
+    recovered, issue = settings.bootstrap_settings()
+    assert issue and recovered.data_root == config.data_root
+    assert recovered.dataset_id == config.dataset_id and recovered.secret_values() == config.secret_values()
+    assert recovered.max_pdf_pages == 300

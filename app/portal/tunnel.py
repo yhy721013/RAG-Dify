@@ -6,6 +6,9 @@ import re
 import subprocess
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
+import httpx
 
 from app.errors import DomainError
 from app.portal.services import process_alive, stop_owned
@@ -26,7 +29,9 @@ def state_path():
 def status(config):
     path = state_path()
     state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return {"managed": bool(state), "status": state.get("status", "not_started"), "public_url": state.get("public_url", ""),
+    alive = bool(state.get("id")) and process_alive(state)
+    effective = state.get("status", "not_started") if alive else "stopped" if state else "not_started"
+    return {"managed": bool(state), "status": effective, "process_running": alive, "public_url": state.get("public_url", ""),
             "configured_url": config.evidence_public_url, "tool_exists": config.cloudflared_executable.is_file(),
             "required_version": VERSION, "download_url": DOWNLOAD_URL, "error": state.get("error"),
             "last_checked_at": state.get("checked_at", "")}
@@ -45,7 +50,14 @@ def operate(config, action, tick=lambda: None):
             atomic_json(state_path(), state)
             return status(config)
         if action == "check":
-            state.update(status="connected" if alive and state.get("public_url") else "stopped", checked_at=datetime.now(timezone.utc).isoformat())
+            state.update(status="starting" if alive else "stopped", checked_at=datetime.now(timezone.utc).isoformat())
+            if alive and state.get("stderr"):
+                output = tail(Path(state["stderr"]))
+                match = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", output)
+                if match:
+                    state["public_url"] = match.group()
+                    if "Registered tunnel connection" in output:
+                        state["status"] = "connected"
             if state.get("id"):
                 atomic_json(state_path(), state)
             return status(config)
@@ -53,6 +65,8 @@ def operate(config, action, tick=lambda: None):
             raise DomainError("input_error", "未知隧道操作")
         if alive:
             return status(config)
+        if any((Path.home() / ".cloudflared" / name).exists() for name in ("config.yml", "config.yaml")):
+            raise DomainError("tunnel_existing_config", "检测到已有 cloudflared 全局配置；请使用自有 HTTPS 或独立配置环境，不自动覆盖已有配置")
         if os.name != "nt" or not config.cloudflared_executable.is_file():
             raise DomainError("tunnel_tool_missing", "请按向导安装 Windows cloudflared 固定版本")
         with config.cloudflared_executable.open("rb") as stream:
@@ -61,6 +75,12 @@ def operate(config, action, tick=lambda: None):
             raise DomainError("tunnel_tool_mismatch", "工具 SHA-256 与项目验证版本不一致；请从向导中的官方地址下载")
         if not config.evidence_api_token:
             raise DomainError("configuration_error", "先配置证据服务密钥，再启动公网隧道")
+        try:
+            response = httpx.get(config.evidence_local_url + "/health", timeout=3, trust_env=False)
+            if response.status_code not in {200, 503} or response.json().get("database") is not True:
+                raise ValueError
+        except (httpx.HTTPError, ValueError) as error:
+            raise DomainError("evidence_unavailable", "本机证据服务尚未就绪，未创建公网入口") from error
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
         stdout, stderr = directory / (stamp + "-tunnel.out.log"), directory / (stamp + "-tunnel.err.log")
         with stdout.open("ab") as out, stderr.open("ab") as err:

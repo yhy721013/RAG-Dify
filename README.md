@@ -13,12 +13,13 @@
 
 ```powershell
 pwsh -File deploy/init-portal.ps1 -InstallMinerU
-# 填写独立 .env.portal，按运行手册配置自己的 Dify 与 HTTPS 证据服务
-pwsh -File deploy/doctor-portal.ps1
 pwsh -File deploy/start-portal.ps1
+# 打开页面“首次配置与诊断”，按五步向导配置并运行实际检查
 ```
 
 本机页面：`http://127.0.0.1:8001`。专用证据服务：`127.0.0.1:8002`；数据在 `data/portal`，原阶段 D 试点保持独立。首次使用及失败恢复见 [测试台运行手册](docs/portal-runbook.md)，开发接口见 [Portal API](docs/portal-api.md)，源码交付见 [CONTRIBUTING](CONTRIBUTING.md)。
+
+易用性版本增加配置草稿/空闲应用、实际鉴权与工作流契约诊断、页面管理临时隧道、条款与检索问题表单、图片预览排序，以及可下载的脱敏任务诊断。每位开发者仍需创建自己的专用 Dify 知识库、导入并发布 Workflow；向导明确区分人工确认、只读诊断和真实报告验证。
 
 2026-09-20 实测文本版34页与扫描版10页 PDF 上传和解析、4条/10条两版发布与隔离、真实单图/双图报告，以及混设备拒绝。本地 `.venv` 的144项测试通过。10条版本的12道可回答题全部命中；3道无答案题仍有相似候选。报告全部待专业复核，这些技术验证不等于安全评估准确率。当前仍只发布 GB/T 8196-2018 的10条，其余候选未入库。
 

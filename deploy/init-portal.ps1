@@ -3,6 +3,7 @@ param([switch]$InstallMinerU)
 $ErrorActionPreference = 'Stop'
 $portalRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $portalPython = Join-Path $portalRoot '.venv\Scripts\python.exe'
+. (Join-Path $PSScriptRoot 'startup-help.ps1')
 Push-Location $portalRoot
 try {
     if (-not (Test-Path -LiteralPath $portalPython)) {
@@ -27,5 +28,8 @@ try {
     }
     & $portalPython -X utf8 -m app.portal.cli init
     if ($LASTEXITCODE -ne 0) { throw '配置初始化失败。' }
-    Write-Output '请在 .env.portal 填写自己的 Dify 配置；不覆盖已存在的配置。'
+    Write-Output '初始化完成。运行 deploy/start-portal.ps1 后，在页面“首次配置与诊断”中填写自己的 Dify 配置。'
+} catch {
+    Write-PortalStartupHelp -ProjectRoot $portalRoot -Phase '初始化'
+    throw
 } finally { Pop-Location }

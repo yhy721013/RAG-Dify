@@ -12,8 +12,8 @@ from app.settings import ROOT
 def main():
     parser = argparse.ArgumentParser(description="本地测试台初始化和诊断")
     parser.add_argument("command", choices=["init", "doctor", "configure-empty-dataset"])
-    parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-4B")
-    parser.add_argument("--embedding-provider", default="langgenius/siliconflow/siliconflow")
+    parser.add_argument("--embedding-model")
+    parser.add_argument("--embedding-provider")
     args = parser.parse_args()
     env = ROOT / ".env.portal"
     if args.command == "init" and not env.exists():
@@ -32,7 +32,8 @@ def main():
             detail = client.request("GET", client.path())
             if detail.get("document_count") != 0:
                 raise DomainError("dataset_not_empty", "此命令只配置空白专用知识库")
-            embedding = {"embedding_model": args.embedding_model, "embedding_model_provider": args.embedding_provider}
+            embedding = {"embedding_model": args.embedding_model or config.embedding_model,
+                         "embedding_model_provider": args.embedding_provider or config.embedding_provider}
             client.request("PATCH", client.path(), json={"indexing_technique": "high_quality", **embedding,
                 "retrieval_model": client.retrieval_model(embedding)})
             client.dataset()

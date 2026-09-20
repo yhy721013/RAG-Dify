@@ -35,17 +35,18 @@ def build_portal(config, checklist, provider="langgenius/siliconflow/siliconflow
 def main():
     parser = argparse.ArgumentParser(description="生成不含密钥的门户 Workflow 模板")
     parser.add_argument("--output", default="data/portal/workflows/portal.candidate.yml")
-    parser.add_argument("--model-provider", default="langgenius/siliconflow/siliconflow")
-    parser.add_argument("--model", default="Qwen/Qwen3.5-27B")
-    parser.add_argument("--embedding-provider", default="langgenius/siliconflow/siliconflow")
-    parser.add_argument("--embedding-model", default="Qwen/Qwen3-Embedding-4B")
+    parser.add_argument("--model-provider")
+    parser.add_argument("--model")
+    parser.add_argument("--embedding-provider")
+    parser.add_argument("--embedding-model")
     args = parser.parse_args()
     from pathlib import Path
     config = PortalSettings.from_env()
     if not config.dataset_id or not config.evidence_public_url:
         parser.error("请先填写 .env.portal 中专用知识库 ID 和证据服务 HTTPS 地址")
     value = build_portal(config, json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8")),
-                         args.model_provider, args.model, args.embedding_provider, args.embedding_model)
+                         args.model_provider or config.vision_provider, args.model or config.vision_model,
+                         args.embedding_provider or config.embedding_provider, args.embedding_model or config.embedding_model)
     path = Path(args.output)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")

@@ -8,12 +8,16 @@
 
 ```powershell
 pwsh -File deploy/init-portal.ps1 -InstallMinerU
-pwsh -File deploy/doctor-portal.ps1
+pwsh -File deploy/start-portal.ps1
 ```
 
 `init` 使用 `uv.lock` 安装工作区 `.venv`；MinerU 使用 `ingestion/mineru-requirements.txt` 安装 `.venv-mineru`。已存在的 `.env.portal` 不覆盖。新配置只生成本机证据服务密钥，不复制开发者的业务凭据。
 
-编辑项目根目录 `.env.portal`。它与旧 `.env` 完全独立。密钥只存放在该本机文件和 Dify Secret，绝不写进前端、DSL 源码或 Git。
+打开 `http://127.0.0.1:8001`，点击“首次配置与诊断”，按本机环境 → 专用知识库 → HTTPS → Dify 工作流 → 检查与首测操作。首次没有云端配置也能打开页面。环境安装失败时，打开 `data/portal-runtime/startup-bootstrap.html`；Python 已运行时另有 `startup-diagnostics.html`。页面日志入口只能在服务启动后使用。
+
+页面将配置写到项目根目录 `.env.portal`，与旧 `.env` 完全独立。密钥输入提交后清空，读取接口不回显，浏览器不持久化；空密码框保留已有值。新证据密钥须在保存前复制并妥善暂存，应用后填到 Dify Secret。密钥不进入 DSL、Git 或源码包。
+
+“保存草稿”只生成 `.env.portal.draft`；可先检查草稿，再点击“应用草稿并重启后台服务”。只有任务空闲时允许应用，门户页面保留运行，worker 和证据服务重启后自动重连。外部配置修改会触发冲突而不是被覆盖；失败保留草稿并尝试恢复本次写入。环境变量覆盖会显示在字段旁，不能在页面覆盖。已有知识版本的数据目录不能换库。
 
 | 配置 | 用途 |
 |---|---|
@@ -27,6 +31,8 @@ pwsh -File deploy/doctor-portal.ps1
 ## 专用 Dify 环境
 
 每个开发者在自己的 Dify 工作区创建一个空白专用知识库，使用只授权该库的密钥。当前适配器参考 Dify 1.17.1 官方源码；云实例版本由平台控制。若需要使用不同嵌入模型，应同时配置知识库及 Workflow 检索节点并重新真实验收。
+
+把知识库 ID 或其控制台网址、专用密钥、模型配置填入向导，保存并应用后点击“初始化空白专用知识库”。它由 worker 执行，仅操作空库；已有文档时拒绝修改。命令行等效入口：
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 -m app.portal.cli configure-empty-dataset
@@ -49,7 +55,11 @@ pwsh -File deploy/stop-portal.ps1
 
 有运行任务时默认拒绝停止；确需中断可使用 `-Force`，下次启动会标记为已中断，由任务页恢复/对账。普通页面关闭不会中断工作。若操作系统意外终止 worker 且遗留 MinerU 子进程，先在任务管理器核对并停止该任务的解析进程，再恢复解析；每次解析使用独立目录。
 
-管理员为 **8002 证据服务** 配置 HTTPS。Quick Tunnel 可用于临时联调，退出后地址可能变化；重启隧道后同步 `.env.portal` 与 Workflow 的 `EVIDENCE_API_BASE_URL`。不要把 8001 上传/复核页面接到隧道。
+在向导 HTTPS 步骤安装链接指向的官方 cloudflared 2026.9.1 Windows x64 工具，放在环境步骤指定的位置，页面会在启动前校验固定 SHA-256。点击启动后，只转发 **8002 证据服务**，再点“填入新地址”、保存并应用。也可直接填自有 HTTPS。
+
+页面仅管理 `data/portal-runtime/managed-tunnel.json` 登记的进程，不接管原来的外部隧道。配置应用时隧道保留；完整停止门户会一并结束托管隧道。重新启动后地址变化，须同步 Workflow 的 `EVIDENCE_API_BASE_URL` 并发布。状态只证明进程/隧道连接，HTTPS 访问和鉴权另由实际诊断验证。有 `.cloudflared/config.yml` 或 `config.yaml` 时不会覆盖全局配置，应使用自有 HTTPS 或独立环境。8001 始终留在回环地址。
+
+向导的 Workflow 步骤可以直接下载按已应用/草稿配置生成的无密钥 DSL；命令行等效入口：
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 -m workflows.build_portal
@@ -59,19 +69,25 @@ pwsh -File deploy/stop-portal.ps1
 
 无环境绑定的结构模板另见 `workflows/portal.template.yml`。生成器支持 `--model-provider`、`--model`、`--embedding-provider`、`--embedding-model`；检索节点中的嵌入配置必须与实际知识库一致。
 
-在 Dify 管理页面将 `.env.portal` 中证据密钥保存为 `EVIDENCE_API_TOKEN` Secret；将 HTTPS 绑定 `EVIDENCE_API_BASE_URL`。确认两个视觉节点绑定同一 `start.images`，模型均为 Qwen/Qwen3.5-27B，`enable_thinking=false`。完成发布 API 的设置并**关闭公开 Web App**，然后将该应用自己的 API Key 写入 `.env.portal`。配置变化后重启本机三个进程。产品运行只使用官方 Service API；不会读取控制台 Cookie 或自动操作浏览器。
+在 Dify 管理页面将本机证据密钥保存为 `EVIDENCE_API_TOKEN` Secret；将 HTTPS 绑定 `EVIDENCE_API_BASE_URL`。确认两个视觉节点绑定同一 `start.images`，默认模型均为 Qwen/Qwen3.5-27B，`enable_thinking=false`。完成发布 API 的设置并**关闭公开 Web App**，然后在向导填写该应用自己的 API Key 并应用。产品运行只使用官方 Service API；不会读取控制台 Cookie 或自动操作浏览器。
 
 当前 Cloud UI 发布前不开放访问控制。实测采用先保持 Secret 为空、知识版本未发布，发布后立即关闭 Web App，再绑定 Secret 并发布更新的顺序；每次更新后复查 Web App 停用、后端 API 启用。不要把 Knowledge API Key 填入 Workflow API Key；本轮创建的应用密钥以 `app-` 开头。
 
 首次入库前 `/health` 为 `503 not_ready` 是预期；可以正常解析和复核 PDF。至少发布一个版本后才接受评估。
 
+## 实际诊断的边界
+
+“检查已应用配置”逐项验证 MinerU 版本、数据库、worker 心跳、Knowledge API 鉴权、模型/版本元数据/远端文档归属、Workflow `/info` 与已发布 `/parameters`、本机和 HTTPS 证据服务鉴权。CLI `deploy/doctor-portal.ps1` 使用同一实现；诊断不调用模型、不创建索引、上下文或报告。结果随配置指纹过期，明确失败项会阻止相应解析/发布/评估操作。草稿更换证据密钥时，鉴权标为待应用复检。
+
+七个 Workflow 输入保持 `images`、`equipment_type`、`equipment_description`、`operating_state`、`work_context`、`same_equipment_confirmed`、`snapshot_id`，没有诊断分支。API 检查不能证明 Dify 内部 Secret、模型权限或回调正常；向导单列人工确认和真实报告验证。只有同配置成功保存并回读报告后，才显示其已有真实验证记录；云端绑定以后变更仍应重新实测。
+
 ## 上传、复核和发布
 
 1. 页面上传一份本地国家标准 PDF。校验 PDF 内容、加密、大小、页数并归档 SHA-256；相同文件复用既有任务与复核记录。MinerU 固定 `--pages all --format zip --tier standard --ocr-mode auto`，不自动使用远程解析或其他档位。
-2. 等待任务完成后打开“对照复核”。左侧显示原 PDF 的本地逐页预览，支持切页及打开原文件；右侧可编辑标准元数据、条款原文、路径、真实来源块和上下文条款 UID，支持拆分/合并。
+2. 等待任务完成后打开“对照复核”。左侧显示原 PDF 的本地逐页预览，支持切页及打开原文件；右侧按待复核/已批准/边界/资产问题筛选与搜索。用可读条款号和原文摘要选择来源块、必要上下文，不必手工复制 UID；开发者详情仍保留身份字段。支持拆分/合并、保存并下一条。
 3. 填写真实复核人，并逐项确认文本、边界、上下文、图表与范围。机器产物保持待复核；修改已批准文本或其依赖会撤销相关批准。来源资产缺失、页覆盖不完整及未知边界不能直接批准。标准状态与来源由维护人员填写，系统不替代适用性判断。
 4. 勾选标准并预览新版本。允许只发布已批准且依赖闭合的子集，页面显示剩余待复核条款数。同标准号/版本会整体替换旧条款集合，须显式确认；其他标准累积保留。
-5. 人工填写检索问题 JSON 数组，每项为 `case_id`、`query`、`expected_clause_uids`、`answerable`。至少一项可回答问题，目标 UID 从预览中复制。版本、自检复核人和时间由后端固定。检索 Top-5 命中率至少 0.9 且无技术错误，分块/元数据/映射全部回读一致，才发布。
+5. 在表单中填写检索问题，勾选预期命中的条款；可增加无答案题。至少一项可回答问题。高级 JSON 输入仍可用于已有标签导入。版本、自检复核人和时间由后端固定。预览会列出缺失依赖、循环、重复身份及同标准替换；阻塞未处理时不能发布。检索 Top-5 命中率至少 0.9 且无技术错误，分块/元数据/映射全部回读一致，才发布。
 
 `rag_snapshot_id` 是强制过滤条件；每一版保留独立文档及映射。同步也核对所有已登记历史分区，发现外来文档、元数据漂移或分块变化会失败，不会自动忽略。旧报告内原文保持不变。首版不自动清理历史版本，较多版本会增加索引存储和核验耗时。
 
@@ -81,11 +97,15 @@ pwsh -File deploy/stop-portal.ps1
 
 选择 1～4 张同设备 JPEG/PNG，每张 ≤5 MiB，填写工况并确认同设备。后端在提交时固定知识版本；上传图片和执行 Workflow 使用同一个由后端生成的 `user`。SSE 仅在服务端消费，页面轮询有限任务状态。
 
+先按页面“首次测试”指引准备一张整体图及必要细节图。当前只支持普通卧式金属车床；不同设备不能混用，不确定的通电、人员接近或联锁状态填“未知”。预览卡支持移除和调整顺序，实际提交遵循卡片顺序。每份报告页面列出六项检查、证据引用与待确认事项。
+
 连接中断后，已取得运行 ID 的任务查询原运行；未取得运行 ID 的已提交请求禁止自动重发，需在 Dify 运行记录核对。失败任务不会展示上一份成功报告。要发起一次新的评估，重新提交新任务；恢复按钮只恢复原任务。
 
 只有 Workflow 成功返回 `report_id`，且通过证据服务 GET 回读、请求/图片/版本/状态与本机持久化一致性检查，页面才展示报告。所有报告 `pending_review`，可以下载 Markdown/JSON，仍需专业复核。
 
 创建文档响应丢失时，同步清单会先按确定性名称对账。存在同名重复或无法确认创建结果时停止；请对照 `data/portal/manifests` 与 Dify 文档列表排查，不直接删除远程数据。`.lock` 文件残留时，先确认没有运行中的发布任务，再按文件记录核查旧进程，手工处理该锁文件。
+
+任一失败均在页面给出错误代码、字段/阶段、请求或运行 ID 与处理建议。任务页“查看诊断与日志”提供有限解析日志、检索自检、Dify 节点进度/错误，并可刷新和下载脱敏 ZIP。ZIP 不含原始请求、模型输入输出、PDF、图片、数据库或报告正文；日志先脱敏再截断。401 核对密钥，403 核对权限/模型，429 按限流提示等待；TLS/隧道失败应修复连通性，不关闭证书验证。需要协作排错时交付诊断包和复现步骤，不发送 `.env.portal`。
 
 ## 本地验证与交付
 

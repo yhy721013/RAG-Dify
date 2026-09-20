@@ -4,7 +4,8 @@ window.setupUI = (() => {
     step = "environment",
     tunnel = null,
     diagnosticJob = "",
-    pollTimer = null;
+    pollTimer = null,
+    configurationBusy = false;
   const groups = ["environment", "knowledge", "https", "workflow", "checks"];
   const statuses = {
     pass: "通过",
@@ -12,6 +13,15 @@ window.setupUI = (() => {
     warn: "提醒",
     pending: "待实际验证",
   };
+
+  function syncControls() {
+    const busy =
+      configurationBusy ||
+      ["queued", "restarting"].includes(state?.apply?.status);
+    $("#apply-setup").disabled = busy || !state?.draft;
+    $('#setup-form button[type="submit"]').disabled = busy;
+    $("#reload-setup").disabled = busy;
+  }
 
   function selectStep(value) {
     step = groups.includes(value) ? value : "environment";
@@ -93,8 +103,7 @@ window.setupUI = (() => {
         (state.apply.error?.message || "请查看本机服务日志");
     $("#setup-data-root").textContent =
       "资料目录：" + state.data_root + "（本向导不切换资料目录）";
-    $("#apply-setup").disabled =
-      !state.draft || ["queued", "restarting"].includes(applied);
+    syncControls();
     $("#diagnose-draft").disabled = !state.draft;
     $("#download-draft-workflow").hidden = !state.draft;
     if (state.draft)
@@ -121,12 +130,15 @@ window.setupUI = (() => {
       : tunnel.configured_url
         ? "当前使用已有 HTTPS 地址。本页面尚未创建托管隧道，不会接管已有进程。"
         : "尚未启动本实例隧道，也未配置自有 HTTPS。";
-    if (tunnel.public_url && tunnel.public_url !== tunnel.configured_url)
+    if (tunnel.status === "stopped" && tunnel.public_url)
+      $("#tunnel-state").textContent += " 该地址已过期，请重新启动隧道。";
+    else if (tunnel.public_url && tunnel.public_url !== tunnel.configured_url)
       $("#tunnel-state").textContent +=
         " 新地址与当前配置不同：填入、应用后还需同步 Dify。";
     $("#tunnel-start").disabled = !tunnel.tool_exists;
     $("#tunnel-stop").disabled = !tunnel.managed || tunnel.status === "stopped";
-    $("#tunnel-use-url").disabled = !tunnel.public_url;
+    $("#tunnel-use-url").disabled =
+      !tunnel.public_url || tunnel.status !== "connected";
   }
 
   function renderDiagnostics(result) {
@@ -193,7 +205,11 @@ window.setupUI = (() => {
             renderDiagnostics(job.result);
             $("#diagnostic-progress").textContent = job.result
               .all_connections_passed
-              ? "本机连接检查完成。模型及 Dify 实际回调仍待真实评估验证。"
+              ? job.result.checks.some(
+                  (r) => r.id === "workflow.end_to_end" && r.status === "pass",
+                )
+                ? "本机连接检查完成，且此配置已有真实报告回读记录。"
+                : "本机连接检查完成。模型及 Dify 实际回调仍待真实评估验证。"
               : "诊断完成，存在需要处理的项目。";
           }
           if (after) await after(job);
@@ -216,6 +232,8 @@ window.setupUI = (() => {
   $("#setup-form").addEventListener("submit", (event) => {
     event.preventDefault();
     run(async () => {
+      configurationBusy = true;
+      syncControls();
       const values = {};
       for (const input of document.querySelectorAll("[data-config-field]")) {
         if (!input.disabled) values[input.dataset.configField] = input.value;
@@ -225,14 +243,16 @@ window.setupUI = (() => {
           values,
           file_revision: state.file_revision,
         });
+        await load();
+        message("草稿已保存。原配置仍在使用；空闲时应用并复检。");
       } finally {
         for (const input of document.querySelectorAll(
           '[data-config-field][data-secret="true"]',
         ))
           input.value = "";
+        configurationBusy = false;
+        syncControls();
       }
-      await load();
-      message("草稿已保存。原配置仍在使用；空闲时应用并复检。");
     }, event.submitter);
   });
   $("#reload-setup").addEventListener("click", () =>
@@ -241,29 +261,41 @@ window.setupUI = (() => {
   $("#apply-setup").addEventListener("click", () =>
     run(async () => {
       if (!state?.draft) throw new Error("请先保存配置草稿");
-      await post("/api/setup/apply", { id: state.draft.id });
-      message("配置应用中，页面将自动确认服务恢复。");
-      const poll = async () => {
-        try {
-          const next = await api("/api/setup");
-          if (["queued", "restarting"].includes(next.apply.status)) {
-            setTimeout(poll, 1500);
-            return;
-          }
-          await load();
-          await status();
-          if (next.apply.status === "failed") displayError(next.apply.error);
-          else
-            message(
-              "配置已应用。请运行已应用配置诊断，并核对 Dify 中相应绑定。",
-            );
-        } catch (error) {
-          displayError(error);
-          setTimeout(poll, 3000);
-        }
-      };
-      setTimeout(poll, 1000);
-    }, $("#apply-setup")),
+      if (isDirty()) throw new Error("页面仍有未保存配置，请先保存草稿");
+      configurationBusy = true;
+      syncControls();
+      try {
+        await post("/api/setup/apply", { id: state.draft.id });
+        message("配置应用中，页面将自动确认服务恢复。");
+        await new Promise((resolve) => {
+          const poll = async () => {
+            try {
+              const next = await api("/api/setup");
+              if (["queued", "restarting"].includes(next.apply.status)) {
+                setTimeout(poll, 1500);
+                return;
+              }
+              await load();
+              await status();
+              if (next.apply.status === "failed")
+                displayError(next.apply.error);
+              else
+                message(
+                  "配置已应用。请运行已应用配置诊断，并核对 Dify 中相应绑定。",
+                );
+              resolve();
+            } catch (error) {
+              displayError(error);
+              setTimeout(poll, 3000);
+            }
+          };
+          setTimeout(poll, 1000);
+        });
+      } finally {
+        configurationBusy = false;
+        syncControls();
+      }
+    }),
   );
   for (const source of ["active", "draft"])
     $("#diagnose-" + source).addEventListener("click", () =>
@@ -299,7 +331,7 @@ window.setupUI = (() => {
     }
     if (
       !confirm(
-        "生成新密钥后，应用时将替换旧值。请保存前复制到 Dify Secret，并重新发布。",
+        "生成新密钥后，应用时将替换旧值。请保存前复制并妥善暂存；应用后同步 Dify Secret 并重新发布。",
       )
     )
       return;
@@ -311,7 +343,7 @@ window.setupUI = (() => {
     input.focus();
     input.select();
     message(
-      "新密钥仅此输入框可见。先复制并完成 Dify 绑定，再保存草稿；提交后清空。",
+      "新密钥仅此输入框可见。先复制并妥善暂存，再保存草稿；提交后清空。应用后同步到 Dify Secret。",
     );
   });
   for (const action of ["start", "stop", "check"])
@@ -326,7 +358,7 @@ window.setupUI = (() => {
       ),
     );
   $("#tunnel-use-url").addEventListener("click", () => {
-    if (tunnel.public_url) {
+    if (tunnel.public_url && tunnel.status === "connected") {
       document.querySelector(
         '[data-config-field="evidence_public_url"]',
       ).value = tunnel.public_url;

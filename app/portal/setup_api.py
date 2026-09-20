@@ -44,7 +44,8 @@ def diagnostic_task(job, manager):
         if fingerprint(config) != job["payload"]["fingerprint"]:
             raise DomainError("configuration_changed", "配置已变化，请重新运行诊断", status=409)
         store.progress(job["id"], "diagnosing")
-        result = run_diagnostics(config, store, emit=lambda row: store.note_event(job["id"], "diagnostic_check", row))
+        result = run_diagnostics(config, store, active_config=manager.config,
+            emit=lambda row: store.note_event(job["id"], "diagnostic_check", row))
         store.progress(job["id"], "complete", result, status="succeeded")
         store.set_state("diagnostics_" + job["payload"]["source"], json.dumps({**result, "job_id": job["id"]}, ensure_ascii=False))
     except Exception as error:
@@ -63,6 +64,17 @@ def latest_diagnostics(manager, source="active"):
                 expected = ""
         result["stale"] = result["fingerprint"] != expected
     return result
+
+
+def tunnel_task(job, manager):
+    from app.portal.tunnel import operate
+    store, config = manager.store, manager.config
+    try:
+        store.progress(job["id"], "tunnel")
+        result = operate(config, job["payload"]["action"])
+        store.progress(job["id"], "complete", result, status="succeeded")
+    except Exception as error:
+        store.progress(job["id"], "tunnel", status="failed", error=public_error(error, config.secret_values(), stage="tunnel", request_id=job["id"]))
 
 
 def install_setup_routes(app, manager):
@@ -120,6 +132,9 @@ def install_setup_routes(app, manager):
         with manager.store.connect(write=True) as conn:
             existing = conn.execute("SELECT id FROM jobs WHERE kind='diagnostics' AND status IN ('queued','running') LIMIT 1").fetchone()
             if existing:
+                current = manager.store.job(existing[0])
+                if current["payload"].get("source") != body.source or current["payload"].get("fingerprint") != fingerprint(config) or current["payload"].get("draft_id") != body.draft_id:
+                    raise DomainError("diagnostic_busy", "另一份配置正在诊断，请完成后再检查此配置", status=409)
                 return {"id": existing[0], "status": "running"}
             job = manager.store._enqueue(conn, "diagnostics", {"source": body.source, "draft_id": body.draft_id, "fingerprint": fingerprint(config)}, "diagnostics:" + uuid4().hex)
         # 诊断只有有界只读请求；不依赖被诊断的 worker 已正常启动。
@@ -132,10 +147,13 @@ def install_setup_routes(app, manager):
         return status(manager.config)
 
     @router.post("/api/setup/tunnel/{action}")
-    def tunnel_action(action: str):
+    def tunnel_action(action: str, tasks: BackgroundTasks):
         if action not in {"start", "stop", "check"}:
             raise DomainError("input_error", "只允许启动、停止或检查本实例隧道")
-        return manager.store.enqueue("tunnel", {"action": action}, "tunnel:" + uuid4().hex)
+        job = manager.store.enqueue("tunnel", {"action": action}, "tunnel:" + uuid4().hex)
+        # 隧道属于门户进程；配置应用只重启 worker/证据服务，不带走隧道。
+        tasks.add_task(tunnel_task, job, manager)
+        return {"id": job["id"], "status": job["status"]}
 
     @router.get("/api/setup/service-logs")
     def logs():

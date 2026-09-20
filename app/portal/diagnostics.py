@@ -78,7 +78,7 @@ def parser_version(executable):
     return {key: data.get(key) for key in ("mineru_version", "python_version")}
 
 
-def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_version, emit=None):
+def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_version, emit=None, active_config=None):
     checks = []
     secret_values = config.secret_values()
     def add(key, title, status, message, *, gates=(), detail=None, suggestion=""):
@@ -166,6 +166,47 @@ def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_
                 add("knowledge.metadata", "知识版本元数据", "pass" if valid else ("warn" if not matches else "fail"),
                     "rag_snapshot_id 为字符串字段" if valid else "尚未建立正确的 rag_snapshot_id 字段", gates=["publish"],
                     suggestion="空库初始化或首次同步会创建此字段；错误类型必须先修正。")
+                known_ids, pending_names = set(), set()
+                if config.evidence_settings().db_path.is_file():
+                    with sqlite3.connect(config.evidence_settings().db_path) as conn:
+                        known_ids = {row[0] for row in conn.execute("SELECT DISTINCT document_id FROM dify_segments WHERE dataset_id=?", (config.dataset_id,))}
+                for manifest_path in (config.data_root / "manifests").glob("sync_*.json"):
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    origin = manifest.get("origin", {})
+                    if origin.get("dataset_id") == config.dataset_id and origin.get("base_url") == base:
+                        for document in manifest.get("documents", {}).values():
+                            if document.get("document_id"):
+                                known_ids.add(document["document_id"])
+                            elif document.get("name"):
+                                pending_names.add(document["name"])
+                actual_ids, foreign, used_names = set(), [], set()
+                for page in range(1, 101):
+                    _, listing = get(path + f"/documents?page={page}&limit=100", config.knowledge_api_key)
+                    rows = listing.get("data")
+                    if not isinstance(rows, list) or not isinstance(listing.get("has_more"), bool):
+                        raise DomainError("dify_contract_error", "文档清单缺少分页字段")
+                    for row in rows:
+                        identity, name = row.get("id"), row.get("name")
+                        if not identity or identity in actual_ids:
+                            raise DomainError("dify_contract_error", "文档列表出现无效或重复身份")
+                        actual_ids.add(identity)
+                        if identity not in known_ids:
+                            if name in pending_names and name not in used_names:
+                                used_names.add(name)
+                            else:
+                                foreign.append(identity)
+                    if not listing["has_more"]:
+                        break
+                    if not rows:
+                        raise DomainError("dify_contract_error", "文档分页未取得新记录")
+                else:
+                    raise DomainError("diagnostic_limit", "文档数超过测试版诊断范围，需要单独核查")
+                missing = known_ids - actual_ids
+                good = not foreign and not missing
+                add("knowledge.ownership", "知识库与本机资料归属", "pass" if good else "fail",
+                    "远端文档均可在本机登记中定位" if good else "发现未登记文档或已登记文档缺失", gates=["publish", "assess"],
+                    detail={"remote_document_count": len(actual_ids), "unknown_document_ids": foreign, "missing_document_ids": sorted(missing)},
+                    suggestion="新实例应使用空白专用库；已有实例请核对同步清单，不删除未知文档或绕过映射校验。")
             except Exception as error:
                 failed("knowledge.connection", "知识库连接与配置", error, ["publish"])
         else:
@@ -199,6 +240,10 @@ def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_
                     raise DomainError("evidence_unavailable", "地址未返回预期证据服务健康状态")
                 if not configured(config.evidence_api_token):
                     raise DomainError("configuration_error", "证据服务密钥未配置")
+                if active_config and config.evidence_api_token != active_config.evidence_api_token:
+                    add("evidence." + key, title, "pending", "健康检查通过；草稿中的新密钥尚未应用，鉴权需应用后复检", gates=["assess"],
+                        suggestion="应用配置并同步 Dify Secret，重新诊断，再用真实图片验证完整调用。")
+                    continue
                 # 固定非报告 ID 只做鉴权探测，不查询业务报告、不写上下文。
                 _, denied = get(url.rstrip("/") + "/reports/portal-connectivity-probe", config.evidence_api_token, (404,))
                 if denied.get("error", {}).get("code") != "report_not_found":
@@ -219,6 +264,6 @@ def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_
                     pass
     add("workflow.end_to_end", "Dify 到证据服务及模型链路", "pass" if verified else "pending",
         "此配置曾完成真实报告保存与回读；云端后续改动仍需重新实测" if verified else "需首次真实图片评估并成功回读报告后验证；以上本机诊断不替代此项", detail=verified)
-    gates = {stage: not any(c["status"] == "fail" and stage in c["gates"] for c in checks) for stage in ("parse", "publish", "assess")}
+    gates = {stage: not any(c["status"] in {"fail", "pending"} and stage in c["gates"] for c in checks) for stage in ("parse", "publish", "assess")}
     return {"fingerprint": fingerprint(config), "checked_at": now(), "provenance": "synthetic_transport" if transport else "live_read_only_checks",
             "checks": checks, "gates": gates, "all_connections_passed": all(gates.values()), "model_invoked": False}

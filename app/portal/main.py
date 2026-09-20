@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -19,7 +19,7 @@ from app.portal.files import save_upload, validate_image, validate_pdf
 from app.portal.repository import PortalRepository
 from app.portal.settings import PortalSettings, bootstrap_settings
 from app.portal.setup import SetupManager, fingerprint
-from app.portal.setup_api import install_setup_routes, latest_diagnostics, diagnostic_task
+from app.portal.setup_api import install_setup_routes, latest_diagnostics, diagnostic_task, tunnel_task
 from app.portal.support import diagnostic_zip, task_diagnostics
 from app.safe_diagnostics import public_error, scrub
 from app.repository import Repository, digest, now
@@ -66,7 +66,7 @@ def create_app(config=None, project_root=ROOT):
     async def lifespan(app):
         store.initialize()
         evidence.initialize()
-        store.interrupt_diagnostics()
+        store.interrupt_controls()
         yield
 
     app = FastAPI(title="本地标准复核与设备评估", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -291,10 +291,13 @@ def create_app(config=None, project_root=ROOT):
         return {**public_job(store.job(job_id)), "events": store.events(job_id)}
 
     @app.post("/api/jobs/{job_id}/retry")
-    def retry(job_id: str):
+    def retry(job_id: str, tasks: BackgroundTasks):
         if store.job(job_id)["kind"] == "diagnostics":
             raise DomainError("diagnostic_retry", "请从首次配置重新发起诊断，使用当前配置")
-        return public_job(store.retry(job_id))
+        result = store.retry(job_id)
+        if result["kind"] == "tunnel":
+            tasks.add_task(tunnel_task, result, manager)
+        return public_job(result)
 
     @app.get("/api/jobs/{job_id}/diagnostics")
     def job_diagnostics(job_id: str):

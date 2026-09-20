@@ -12,6 +12,8 @@ git diff --check
 
 按功能提交、更新 docs/acceptance.md；区分单元模拟、真实解析、真实索引和真实模型报告。不要在测试中访问个人 Dify 环境。真实联调使用自己的专用数据根目录、知识库、Workflow 与密钥。
 
+接手时先从无配置的源码包初始化，并走页面五步向导。排错交付“复现操作 + Git 提交 + 任务 ID + 脱敏诊断 ZIP”，不要提交配置或原始 SSE。共享的诊断实现位于 `app/portal/diagnostics.py`，配置草稿/应用在 `setup.py` / `services.py`，控制任务与业务 worker 的生命周期分开；继续修改时保留这一约束。输入契约真实夹具位于 `fixtures/dify_portal/workflow_parameters.real.json`，来源为本轮已发布专用应用 Service API；夹具不含凭据，不能替代目标开发者自己的实际诊断。
+
 本轮只准备本地版本化源码与干净 ZIP，不创建/推送远程。后续交付私有 Git 仓库时：
 
 1. 明确仓库地址和接收开发者，再审计 **HEAD 与完整历史** 的密钥和数据。发现曾提交凭据须先轮换并处理历史；`.gitignore` 不会清理旧提交。

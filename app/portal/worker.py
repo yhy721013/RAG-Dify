@@ -164,10 +164,6 @@ def execute(job, store, config):
                 client.dataset()
                 client.snapshot_metadata()
                 result = {"dataset_id": config.dataset_id, "configured": True}
-        elif job["kind"] == "tunnel":
-            from app.portal.tunnel import operate
-            store.progress(job["id"], "tunnel")
-            result = operate(config, job["payload"]["action"], store.heartbeat)
         else:
             raise DomainError("unknown_job", "未知任务类型")
         store.progress(job["id"], "complete", result, status="succeeded")
@@ -189,7 +185,7 @@ def main():
     store = PortalRepository(config.db_path)
     store.initialize()
     with worker_lock(config.data_root / "worker.lock"):
-        store.recover(include_diagnostics=False)
+        store.recover(include_controls=False)
         stop_heartbeat = threading.Event()
         def heartbeat():
             while not stop_heartbeat.wait(5):
