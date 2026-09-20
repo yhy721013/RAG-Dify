@@ -337,3 +337,8 @@
 - 之后从页面再次运行真实诊断：13项通过，真实链路项关联上述新报告；final-double-image.json、final-diagnostics.json及脱敏任务ZIP保存在data/portal/usability-acceptance。旧两份报告及两版知识状态仍与变更前一致，没有新批准条款。
 - 最终内置浏览器验证：新成功报告可见；切换混设备失败诊断时旧成功报告隐藏，防止关联混淆。Dify最新发布版的Web App仍停用，后端API启用，MCP停用。门户及8002服务保留运行，托管隧道为临时入口，实际地址见本机配置与managed-tunnel.json。
 - 交付范围：源码、锁文件、配置/Workflow无密钥模板、测试、运行手册和本验收记录。每个开发者仍需自己的专用Dify知识库/工作流/模型配置，并人工复核标准。空目录演练和原专用云环境的真实报告验证分别记录，不声称在全新Dify账号中完成免配置验收，也未开展阶段E业务准确性评测。
+
+### 最终源码包复验
+
+- a48aa97源码ZIP解压到tmp/portal-final-a48aa97；在该目录使用工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：**166 passed in 5.88s**，2条既有弃用警告。ZIP有123个文件及15个目录项，无运行配置、data/test_files/虚拟环境，当前已知凭据精确命中0。记录final-archive.json。
+- 本记录是文档补记；最终ZIP由包含此记录的干净HEAD重新导出，应用代码、测试和依赖与已复验的a48aa97相同。仅交付本地源码包，未推送远端。浏览器已保留最新成功报告；未发现本轮最终页面的未处理JavaScript异常。
