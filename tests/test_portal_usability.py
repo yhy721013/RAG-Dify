@@ -302,3 +302,17 @@ def test_bootstrap_retains_identity_when_numeric_config_is_invalid(environment, 
     assert issue and recovered.data_root == config.data_root
     assert recovered.dataset_id == config.dataset_id and recovered.secret_values() == config.secret_values()
     assert recovered.max_pdf_pages == 300
+
+
+def test_repair_to_fallback_value_clears_startup_error(environment, monkeypatch):
+    from app.portal import main
+    config, _, manager = environment
+    manager.env.write_text(manager.env.read_text(encoding="utf-8") + "PORTAL_MAX_PDF_PAGES=invalid\n", encoding="utf-8")
+    meta = manager.save({"max_pdf_pages": "300"}, manager.file_revision())
+    assert "max_pdf_pages" in meta["changed_fields"]
+    monkeypatch.setattr(main, "bootstrap_settings", lambda: (config, "numeric configuration invalid"))
+    with TestClient(create_app(project_root=manager.root), base_url=config.origin) as client:
+        assert client.get("/api/status").json()["configuration_error"]
+        manager.apply_path.write_text(json.dumps({"status":"succeeded", "fingerprint": fingerprint(config)}), encoding="utf-8")
+        monkeypatch.setattr(main, "bootstrap_settings", lambda: (config, ""))
+        assert client.get("/api/status").json()["configuration_error"] == ""

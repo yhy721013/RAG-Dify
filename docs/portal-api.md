@@ -46,6 +46,6 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 
 解析、配置空库、发布和评估由单独 worker 执行；诊断和隧道控制由门户执行，避免重启 worker 连带结束隧道。诊断结果含逐项 status、gates、details、suggestion、checked_at、配置指纹及来源。配置改变后旧结果不能作为当前通行依据。真实报告验证单列，不用只读检查冒充模型运行成功。
 
-错误保留原有 error.code/message/path；扩展 stage、request_id、suggestion、details，其中上游状态/代码/失败节点经过脱敏，不返回请求头、原始模型输入输出。422 返回字段名而不返回提交值。配置的外部修改、活动任务、知识库归属冲突均返回明确错误而不是自动覆盖。
+错误保留原有 error.code/message/field；扩展 stage、request_id、suggestion、details，其中上游状态/代码/失败节点经过脱敏，不返回请求头、原始模型输入输出。422 返回字段名而不返回提交值。配置的外部修改、活动任务、知识库归属冲突均返回明确错误而不是自动覆盖。
 
 `portal.db` 的 documents/jobs/releases/state/review_audit/job_events 与 `evidence.db` 五张业务表分离。GET 单个任务额外返回阶段历史 events；恢复任务不删除既有错误记录，历史中不包含原始 SSE 或密钥。PDF、解析及导出保存在配置的数据根目录。门户证据服务只接受同时在 releases 登记且证据库 active 的知识版本；旧服务继续使用单一 ACTIVE_SNAPSHOT_ID。

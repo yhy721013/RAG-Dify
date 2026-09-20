@@ -79,7 +79,7 @@ def create_app(config=None, project_root=ROOT):
         request.state.trace_id = "req_" + uuid4().hex
         if config is None and manager.apply_path.exists():
             apply_state = json.loads(manager.apply_path.read_text(encoding="utf-8"))
-            if apply_state.get("status") == "succeeded" and apply_state.get("fingerprint") != fingerprint(settings):
+            if apply_state.get("status") == "succeeded" and (configuration_error or apply_state.get("fingerprint") != fingerprint(settings)):
                 candidate, problem = bootstrap_settings()
                 if not problem and fingerprint(candidate) == apply_state["fingerprint"]:
                     settings, configuration_error = candidate, ""

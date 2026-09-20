@@ -80,7 +80,8 @@ function displayError(error) {
   }
   for (const input of document.querySelectorAll(".field-error"))
     input.classList.remove("field-error");
-  const fields = detail.details?.fields || detail.fields || [];
+  const fields = [...(detail.details?.fields || detail.fields || [])];
+  if (detail.field) fields.push({ field: detail.field });
   for (const item of fields)
     for (const input of document.querySelectorAll("input,textarea,select")) {
       if (
@@ -433,6 +434,8 @@ async function refreshJobs() {
   }
 }
 async function openReport(id) {
+  $("#report-panel").hidden = true;
+  $("#task-diagnostics-panel").hidden = true;
   const report = await api(`/api/jobs/${id}/report`);
   $("#report-text").textContent = report.markdown;
   renderReport(report);
@@ -1337,6 +1340,8 @@ function renderImages() {
 }
 
 async function openTaskDiagnostics(id) {
+  $("#report-panel").hidden = true;
+  $("#task-diagnostics-panel").hidden = true;
   const data = await api(`/api/jobs/${id}/diagnostics`),
     root = $("#task-diagnostics-content");
   root.replaceChildren();

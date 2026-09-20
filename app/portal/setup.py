@@ -131,6 +131,7 @@ class SetupManager:
         if set(changes) - FIELDS.keys():
             raise DomainError("input_error", "只允许修改向导列出的字段")
         values = self.values(self.env)
+        original_values = dict(values)
         for attr, value in changes.items():
             suffix, _, kind, _ = FIELDS[attr]
             key = "PORTAL_" + suffix
@@ -184,7 +185,8 @@ class SetupManager:
             path.replace(self.draft)
         finally:
             path.unlink(missing_ok=True)
-        changed = [name for name in FIELDS if str(getattr(candidate, name)) != str(getattr(self.config, name))]
+        changed = [name for name in FIELDS if str(getattr(candidate, name)) != str(getattr(self.config, name))
+                   or values.get("PORTAL_" + FIELDS[name][0]) != original_values.get("PORTAL_" + FIELDS[name][0])]
         meta = {"id": identity, "base_revision": expected_revision, "fingerprint": fingerprint(candidate),
                 "changed_fields": changed, "saved_at": now()}
         atomic_json(self.meta, meta)
