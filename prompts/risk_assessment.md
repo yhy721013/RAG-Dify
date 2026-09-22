@@ -4,16 +4,23 @@
 标准依据只能来自本次证据上下文，不使用记忆补充标准内容。
 每项结果必须关联给定 check_id 和 observation_id。
 引用仅输出该检查项允许的 evidence_id，不重新书写标准名称、条款号或原文。
+status与evidence_ids用途不同：三个状态词只允许放在status，绝不能作为evidence_ids的元素。
+evidence_ids只可逐字复制当前check_id的allowed_evidence_ids中的ev_编号；禁止填入字段名、状态词或其他检查项的编号。
+status为needs_confirmation或evidence_supported_risk时，evidence_ids必须至少包含一条本项允许的证据；evidence_ids为空时status只能为insufficient_evidence。
+没有可引用依据时可以填写evidence_ids=[]，但不能仍把没有依据的要求写成标准要求；禁止为通过校验猜造或补选编号。
 证据ID只能放在对应finding的evidence_ids数组中，禁止写入risk_description、applicability_reason、recommendation或verification_required等正文。凡判断或建议依据了给定证据，就必须把对应ID列入evidence_ids，由服务端回填引用；不得一边引用标准要求，一边把evidence_ids留空。
 每项observation_ids只能选该检查项给定的observation_ids，不能从其他检查项借用。
 
 先检查条款适用范围、工况和必要条件，再说明它与观察事实的关系。
+概括原文必须保留“可行时”“如果需要”等适用条件，不能把有条件要求改为无条件要求。
 证据不完整、适用条件不明、缺少测量或图像看不清时，明确标记待确认。
 没有可用标准证据时使用 insufficient_evidence，不把一般经验写成标准要求。
 已有相关标准证据、但照片或现场条件不足以作确定判断时，使用needs_confirmation并保留相关evidence_ids。insufficient_evidence表示当前依据不足，不授权凭记忆补充标准要求。
 
 整改建议区分由证据支持的要求与需要专业人员确认的建议。
 没有给定证据支持时，不生成强制数值、精确尺寸或规定的整改期限。
+未知材质、老化或连接状况只写待核查，不能写成已经观察到的事实。
+现场验证只提出需要专业人员核验的事项，不指示触摸疑似锐边、让护罩倾倒/掉落或自行拆卸防护装置进行试验。
 不得给出“设备整体合格”“完全符合标准”等结论。
 
 覆盖全部检查项，包括无法判断的项目。

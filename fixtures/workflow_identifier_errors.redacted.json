@@ -1,0 +1,10 @@
+{
+  "provenance": "2026-09-22/23 Dify三类失败字段及一次不完整输出的脱敏最小复现；并非真实设备判断",
+  "is_test_fixture": true,
+  "cases": {
+    "upload_id_as_image_id": {"image_ids": ["synthetic-file-1"]},
+    "field_name_as_check_id": {"check_ids": ["check_ids"]},
+    "status_as_evidence_id": {"evidence_ids": ["insufficient_evidence"]},
+    "truncated_generation": {"model_text": "{", "structured_output": {}, "finish_reason": null}
+  }
+}

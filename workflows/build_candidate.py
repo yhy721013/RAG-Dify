@@ -11,7 +11,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from app.settings import ROOT, Settings
 from workflows import nodes as steps
-from workflows.schemas import AssessmentDraft, VisionResult
+from workflows.schemas import AssessmentDraft, VisionResult, output_schema
 
 
 def ref(node, variable):
@@ -88,16 +88,18 @@ def build_candidate(settings, checklist, model_provider, model_name, evidence_ur
             "retry_config": {"retry_enabled": False, "max_retries": 0, "retry_interval": 1000}})
 
     def llm(node_id, title, prompt_file, schema, user_prompt):
+        contract = output_schema(schema, checklist)
         params = {"temperature": 0.1}
-        if model_provider == "langgenius/siliconflow/siliconflow" and model_name == "Qwen/Qwen3.5-27B":
-            # 该插件模型声明只暴露思考等参数；固定为已通过双图实测的非思考模式。
-            params = {"enable_thinking": False}
+        if model_provider == "langgenius/siliconflow/siliconflow" and model_name in {"Qwen/Qwen3.5-27B", "Qwen/Qwen3.6-27B"}:
+            # 官方模型声明及OAI兼容SDK支持原生JSON Schema，不能只依赖提示词模拟结构化输出。
+            params = {"enable_thinking": False, "response_format": "json_schema",
+                "json_schema": json.dumps({"name": "mechanical_safety_" + node_id, "strict": True, "schema": contract}, ensure_ascii=False)}
         add(node_id, "llm", title, {"model": {"provider": model_provider, "name": model_name, "mode": "chat", "completion_params": params},
             "prompt_template": [{"role": "system", "text": (ROOT / prompt_file).read_text(encoding="utf-8")},
                                 {"role": "user", "text": user_prompt}],
             "context": {"enabled": False, "variable_selector": []},
             "vision": {"enabled": True, "configs": {"variable_selector": ["start", "images"], "detail": "high"}},
-            "structured_output_enabled": True, "structured_output": {"schema": schema.model_json_schema()},
+            "structured_output_enabled": True, "structured_output": {"schema": contract},
             "retry_config": {"retry_enabled": False, "max_retries": 0, "retry_interval": 1000}})
 
     selected_type = checklist.get("equipment_type") or "待业务确认的设备类别"

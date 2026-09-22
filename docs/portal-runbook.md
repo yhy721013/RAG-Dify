@@ -61,6 +61,10 @@ pwsh -File deploy/start-portal.ps1
 5. 在该应用环境变量中设置 `EVIDENCE_API_BASE_URL` 为本实例HTTPS地址，`EVIDENCE_API_TOKEN` Secret为本机同值。创建该应用自己的Workflow API Key，填回门户；可粘贴编排页面网址作为应用ID，保存并应用。
 6. 回到向导，逐项记录已核对的人工确认，运行“检查已应用配置”。
 
+当前生成器对硅基流动 `Qwen/Qwen3.5-27B` 和 `Qwen/Qwen3.6-27B` 同时配置 Dify 结构化输出及提供方的 `response_format=json_schema`、严格 JSON Schema、`enable_thinking=false`。检查项枚举来自生成时的固定清单；图片编号与证据编号各有独立格式约束。其他提供方是否支持原生约束须按其模型能力验证，服务端门禁始终保留。
+
+本机修改模型名称只影响本机配置、生成的 DSL 和诊断，不会自动修改 Dify 已发布节点。更换时须同步两个 LLM 节点、图片绑定、输出 Schema 和 `MODEL_ID`，再发布更新。只改本机字段或未发布草稿都不能证明模型切换生效；以新运行日志中的 `model_name` 为准。
+
 成功标志：Workflow鉴权和**已发布**输入契约通过。Knowledge Key与Workflow Key不能互换；后者在本轮Cloud实例中以 `app-` 开头，实际鉴权结果才是依据。缺失权限、Secret未绑定、模型被停用等问题要根据失败项修复。
 
 门户Workflow保留七个输入：`images`、`equipment_type`、`equipment_description`、`operating_state`、`work_context`、`same_equipment_confirmed`、`snapshot_id`。最后一项由本机后端固定，设备评估页面不要求手工填写。**不要给门户导入旧版 `safety-assessment.yml`**，它是六输入的历史单快照结构。

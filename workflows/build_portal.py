@@ -17,7 +17,7 @@ def build_portal(config, checklist, provider="langgenius/siliconflow/siliconflow
     workflow["environment_variables"] = [v for v in workflow["environment_variables"] if v["name"] != "SNAPSHOT_ID"]
     for value in workflow["environment_variables"]:
         if value["name"] == "WORKFLOW_VERSION":
-            value["value"] = "portal-v1"
+            value["value"] = "portal-v2-identifiers"
     nodes = {node["id"]: node["data"] for node in workflow["graph"]["nodes"]}
     nodes["start"]["variables"].append(input_field("snapshot_id", "后端固定的已发布知识版本", max_length=160))
     for var in nodes["validate_input"]["variables"]:

@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "Finding": {
+    "AssessmentFinding": {
       "additionalProperties": false,
       "properties": {
         "check_id": {
@@ -8,7 +8,15 @@
           "minLength": 1,
           "pattern": "^[A-Za-z0-9_.:-]+$",
           "title": "Check Id",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "guard_hazards",
+            "guard_joints",
+            "guard_access",
+            "guard_durability",
+            "fixed_guard",
+            "movable_guard"
+          ]
         },
         "observation_ids": {
           "items": {
@@ -25,8 +33,7 @@
         "status": {
           "enum": [
             "evidence_supported_risk",
-            "needs_confirmation",
-            "insufficient_evidence"
+            "needs_confirmation"
           ],
           "title": "Status",
           "type": "string"
@@ -46,10 +53,101 @@
           "type": "string"
         },
         "evidence_ids": {
+          "description": "只逐字复制当前检查项 allowed_evidence_ids 中的编号；状态词、字段名和条款UID均不是证据编号。",
+          "items": {
+            "pattern": "^ev_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "recommendation": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "verification_required": {
+          "items": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Verification Required",
+          "type": "array"
+        }
+      },
+      "required": [
+        "check_id",
+        "observation_ids",
+        "status",
+        "risk_description",
+        "applicability_reason",
+        "evidence_ids",
+        "recommendation",
+        "verification_required"
+      ],
+      "title": "AssessmentFinding",
+      "type": "object"
+    },
+    "InsufficientFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "title": "Check Id",
+          "type": "string",
+          "enum": [
+            "guard_hazards",
+            "guard_joints",
+            "guard_access",
+            "guard_durability",
+            "fixed_guard",
+            "movable_guard"
+          ]
+        },
+        "observation_ids": {
           "items": {
             "maxLength": 160,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "status": {
+          "const": "insufficient_evidence",
+          "title": "Status",
+          "type": "string"
+        },
+        "risk_description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Risk Description",
+          "type": "string"
+        },
+        "applicability_reason": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Applicability Reason",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "description": "确实缺少可引用依据时允许空数组，但不得把没有依据的判断写成标准要求。",
+          "items": {
+            "pattern": "^ev_[0-9a-f]{32}$",
             "type": "string"
           },
           "maxItems": 3,
@@ -85,7 +183,7 @@
         "recommendation",
         "verification_required"
       ],
-      "title": "Finding",
+      "title": "InsufficientFinding",
       "type": "object"
     }
   },
@@ -93,7 +191,14 @@
   "properties": {
     "findings": {
       "items": {
-        "$ref": "#/$defs/Finding"
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AssessmentFinding"
+          },
+          {
+            "$ref": "#/$defs/InsufficientFinding"
+          }
+        ]
       },
       "maxItems": 6,
       "minItems": 1,

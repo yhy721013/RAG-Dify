@@ -53,6 +53,26 @@ def _ids(value, label, minimum=0, maximum=24):
     return value
 
 
+def _observation_images(values, manifest):
+    """只兼容本次清单里可精确定位的文件ID，不猜测未知编号。"""
+    allowed = {row["image_id"] for row in manifest}
+    aliases = {}
+    for row in manifest:
+        reference = row["file_ref"]
+        if reference in aliases or (reference in allowed and reference != row["image_id"]):
+            raise ValueError("图片清单存在歧义，禁止转换图片编号")
+        aliases[reference] = row["image_id"]
+    normalized = []
+    for value in _ids(values, "观察图片", 1, 4):
+        identity = value if value in allowed else aliases.get(value)
+        if identity is None:
+            raise ValueError("视觉观察引用了不存在的图片：" + value)
+        normalized.append(identity)
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("转换后的观察图片标识重复")
+    return normalized
+
+
 def _checklist(value):
     data = _load(value, "checklist")
     if not isinstance(data, dict) or data.get("review_status") != "approved":
@@ -109,7 +129,9 @@ def validate_input(images, equipment_type, equipment_description, operating_stat
                "same_equipment_confirmed": True, "workflow_version": _text(workflow_version, "工作流版本", 200),
                "model_id": _text(model_id, "模型标识", 200)}
     _id(dataset_id, "dataset_id")
-    return {"request_json": _dump(request), "image_manifest_json": _dump(manifest),
+    # 上传UUID只保留在权威请求中，避免模型把file_ref当成image_id。
+    model_manifest = [{"image_id": row["image_id"], "position": row["position"]} for row in manifest]
+    return {"request_json": _dump(request), "image_manifest_json": _dump(model_manifest),
             "equipment_context_json": _dump({key: request[key] for key in
                 ("equipment_type", "equipment_description", "operating_state", "work_context")}),
             "checklist_json": _dump(checklist["checks"])}
@@ -129,10 +151,10 @@ def build_checks(vision_json, request_json, checklist_json):
     observations, assignments = [], {uid: [] for uid in known_checks}
     for index, item in enumerate(raw, 1):
         _keys(item, ("image_ids", "part", "visible_fact", "unknowns", "check_ids"), "视觉观察")
-        if not set(_ids(item["image_ids"], "观察图片", 1, 4)) <= image_ids:
-            raise ValueError("视觉观察引用了不存在的图片")
-        if not set(_ids(item["check_ids"], "候选检查项", 0, 6)) <= known_checks:
-            raise ValueError("模型生成了清单外检查项")
+        normalized_images = _observation_images(item["image_ids"], request["image_manifest"])
+        unknown_checks = set(_ids(item["check_ids"], "候选检查项", 0, 6)) - known_checks
+        if unknown_checks:
+            raise ValueError("视觉观察 obs_" + f"{index:03d}" + " 的check_ids包含清单外检查项：" + ",".join(sorted(unknown_checks)))
         _text(item["part"], "观察部位", 200)
         _text(item["visible_fact"], "可见事实", 3500)
         if not isinstance(item["unknowns"], list) or len(item["unknowns"]) > 20:
@@ -140,7 +162,7 @@ def build_checks(vision_json, request_json, checklist_json):
         for unknown in item["unknowns"]:
             _text(unknown, "待确认事实")
         uid = f"obs_{index:03d}"
-        observations.append({"observation_id": uid, "image_ids": item["image_ids"],
+        observations.append({"observation_id": uid, "image_ids": normalized_images,
                              "visible_fact": item["part"] + "：" + item["visible_fact"], "unknowns": item["unknowns"]})
         for check_id in item["check_ids"]:
             assignments[check_id].append(uid)
@@ -206,9 +228,40 @@ def prepare_payload(request_json, retrieval_results):
     return {"body": _dump(request)}
 
 
+def _model_evidence(context):
+    """保留完整原文及必要上下文，仅移除模型不应选择的内部标识和存档元数据。"""
+    clause_fields = ("standard_code", "standard_name", "edition", "standard_status", "scope",
+                     "clause_no", "text_verbatim", "evidence_complete")
+    evidence = []
+    for row in context["evidence"]:
+        item = {key: row[key] for key in clause_fields}
+        item.update(evidence_id=row["evidence_id"], evidence_complete=row["evidence_complete"],
+            applicability_context=row["applicability_context"], completeness_issues=row.get("completeness_issues", []),
+            context_clauses=[{key: dependency[key] for key in clause_fields} for dependency in row.get("context_clauses", [])])
+        evidence.append(item)
+    request_checks = {row["check_id"]: row for row in context["request"]["checks"]}
+    checks = [{"check_id": row["check_id"], "observation_ids": request_checks[row["check_id"]]["observation_ids"],
+               "retrieval_status": row["retrieval_status"], "allowed_evidence_ids": row["allowed_evidence_ids"]}
+              for row in context["checks"]]
+    return {"checks": checks, "evidence": evidence}
+
+
+def _http_failure(label, status_code, body):
+    details = []
+    try:
+        data = _load(body, label)
+        error = data.get("error", {}) if isinstance(data, dict) else {}
+        if isinstance(error, dict):
+            details = [error[key][:500] for key in ("code", "field", "message")
+                       if isinstance(error.get(key), str) and error[key]]
+    except ValueError:
+        pass
+    return ValueError(label + "（HTTP " + str(status_code) + "）" + ("：" + "；".join(details) if details else ""))
+
+
 def unpack_evidence(status_code, body, request_json):
     if status_code != 200:
-        raise ValueError("证据服务返回非200状态，停止评估")
+        raise _http_failure("证据服务未通过校验，停止评估", status_code, body)
     context, request = _load(body, "证据服务响应"), _load(request_json, "原始请求")
     if not isinstance(context, dict) or not isinstance(context.get("request"), dict):
         raise ValueError("证据服务响应缺少请求副本")
@@ -230,7 +283,7 @@ def unpack_evidence(status_code, body, request_json):
         if not set(_ids(check.get("allowed_evidence_ids"), "允许证据", 0, 3)) <= set(ids):
             raise ValueError("允许集合指向不存在的证据")
     return {"context_id": context["context_id"],
-            "evidence_json": _dump({"checks": checks, "evidence": evidence}),
+            "evidence_json": _dump(_model_evidence(context)),
             "context_json": _dump(context)}
 
 
@@ -249,8 +302,11 @@ def finalize_payload(context_json, assessment_json):
         if uid not in checks or uid in seen:
             raise ValueError("模型评估检查项越界或重复")
         seen.add(uid)
-        if not set(_ids(item["evidence_ids"], "模型证据标识", 0, 3)) <= set(checks[uid]["allowed_evidence_ids"]):
-            raise ValueError("模型引用了该检查项未授权的证据")
+        unknown_evidence = set(_ids(item["evidence_ids"], "模型证据标识", 0, 3)) - set(checks[uid]["allowed_evidence_ids"])
+        if unknown_evidence:
+            raise ValueError("检查项 " + uid + " 的evidence_ids包含未授权证据：" + ",".join(sorted(unknown_evidence)))
+        if not item["evidence_ids"] and item["status"] != "insufficient_evidence":
+            raise ValueError("检查项 " + uid + " 的evidence_ids为空时，status必须为insufficient_evidence")
         prose = _dump([item[key] for key in ("risk_description", "applicability_reason", "recommendation", "verification_required")])
         inline_ids = set(re.findall(r"ev_[0-9a-f]{32}", prose))
         if not inline_ids <= set(item["evidence_ids"]):
@@ -261,7 +317,7 @@ def finalize_payload(context_json, assessment_json):
 
 def unpack_report(status_code, body, context_id):
     if status_code != 200:
-        raise ValueError("定稿校验失败，不得输出模型草稿")
+        raise _http_failure("定稿校验失败，不得输出模型草稿", status_code, body)
     report = _load(body, "报告响应")
     if (not isinstance(report, dict) or report.get("context_id") != context_id or
         report.get("validation_passed") is not True or report.get("review_status") != "pending_review"):

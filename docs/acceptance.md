@@ -399,3 +399,66 @@
 
 - 7c4e35e源码包包含133个文件，解压至tmp/batch-delivery-7c4e35e，在该目录使用工作区.venv执行pytest：196 passed in 9.36s，2条既有弃用警告，Node队列回归实际执行。无运行配置、业务目录、虚拟环境或已知凭据；记录archive-check.json。35处本地文档链接/锚点检查通过。
 - 最终包包含此验收补记，代码/测试/依赖与上述已复验版本一致；本地保留真实三文件的批次完成状态，新标准203条仍待人工复核，原批准范围不变。
+
+## 本机重新安装 — 独立环境与启动验收（2026-09-22）
+
+- 在 `D:\RAG` 安装现有 `yhy721013/RAG-Dify` 仓库；起点 `1b0dd97`，工作区干净，`git ls-remote origin HEAD refs/heads/codex/batch-pdf-upload` 与本地提交一致。创建本地分支 `codex/local-setup-20260922`。已阅读架构指南、门户计划、运行手册与初始化/启动脚本；本轮为安装配置，不扩展阶段 E。
+- 环境检查发现 Windows Launcher 残留 `D:\Python312\python.exe`，`py -3.12 --version` 与原始初始化命令均失败；现有 Anaconda 3.12.4 未改动。由 uv 官方 0.12.16 Windows x64 发布包引导，下载后核对官方 SHA-256：`f730454bf09019754e5e5abd71a8aa18683cb739cba0d9c720bac2e7c901160f`。设置本次安装进程的 `UV_PYTHON_INSTALL_DIR=D:\RAG\data\tools\python`、`UV_PYTHON_PREFERENCE=only-managed`，执行 `data/tools/uv/0.12.16/uv.exe venv --python 3.12 --seed .venv`，实际获得 CPython 3.12.14。Python 基础运行时保存在项目忽略目录，后续不能单独清除此目录。
+- 随后执行 `pwsh -NoProfile -File deploy/init-portal.ps1 -InstallMinerU` 成功；轻量 `.venv` 按 `uv.lock` 安装，独立 `.venv-mineru` 按 `ingestion/mineru-requirements.txt` 安装109个包。生成本机 `.env.portal`、随机证据密钥、空任务库和证据库。`uv pip check --python .venv/Scripts/python.exe` 与 `.venv-mineru/Scripts/python.exe` 均通过。PowerShell 7.6.5，uv 0.12.16，FastAPI 0.141.1，Pydantic 2.13.5；详情为 `data/local-install/runtime.json`。
+- 执行 `pwsh -NoProfile -File deploy/start-portal.ps1` 成功，门户8001、证据服务8002及单worker均正常；实际监听均为127.0.0.1。内置浏览器已打开本机页面并验证空资料库和配置向导。`python -X utf8 -m app.portal.cli doctor` 本机解析器、两份数据库、worker、证据接口鉴权5项通过；空库 `/health` 的503明确表示尚无发布版本。初始诊断保存在 `data/local-install/diagnostics-initial.json`。
+- 工作区 `.venv\Scripts\python.exe -X utf8 -m pytest -q`：**196 passed, 2 warnings in 17.53s**，无跳过项；2条为已存在的Starlette/httpx与AnyIO弃用警告，未为消除警告变更锁定依赖。测试日志为 `data/local-install/pytest.txt`，本次测试不代表真实云端报告验收。
+- 独立环境 `mineru version --json` 实际返回4.0.2 / Python3.12.14，`mineru-kit parse --help`正常。使用明确标记 `SYNTHETIC INSTALLATION TEST ONLY` 的单页合成PDF执行 `mineru-kit parse data/local-install/synthetic-parser-smoke.pdf -o data/local-install/mineru-smoke --pages all --format zip --tier standard --ocr-mode auto`，实际下载模型资源并完成本地解析；项目适配器验证完整1页、5块、无缺页及完整导出文件。未调用远程解析、未上传到门户、未批准或导入业务库。日志与验证记录为 `data/local-install/mineru-smoke.log`、`mineru-smoke-verification.json`；这不是扫描国标或复杂图表的准确性验收。
+- 从Cloudflare官方发布页安装固定 `cloudflared 2026.9.1` 到配置默认路径，实际SHA-256与项目基线一致。此阶段仅完成工具安装，尚未建立公网回调入口。
+- 用户选择Dify Cloud并已自行完成登录；工作区已有历史试点，另建 `mechanical-safety-rag-local-20260922` 空库供本实例使用。单库Knowledge Key、专用Workflow Key、HTTPS与Secret绑定待后续配置；不复用已有云端文档或历史成功报告。本机尚无业务PDF、人工批准条款、已发布知识版本或真实报告，仍须本人提供合法资料和人工复核。
+- `.env.portal`、草稿、运行时、虚拟环境、模型/解析包和数据库均由现有 `.gitignore` 排除；仅提交本验收记录，不提交业务资产、配置密钥或运行日志。系统 `py` 启动器残留路径未修复；本目录已有 `.venv` 后启动与重复初始化可正常使用项目脚本。
+
+### 本机重新安装 — Dify Cloud 与 HTTPS 配置验收（2026-09-22）
+
+- 用户自行登录Dify、创建并填写仅授权本实例空库的Knowledge Key；门户按“保存草稿 → 应用”生效。执行页面“初始化空白专用知识库”成功，实际只读检查确认鉴权、High Quality/Hybrid Search、Qwen/Qwen3-Embedding-4B、rag_snapshot_id字符串元数据和空库归属均通过。历史两个试点知识库和应用未更改。
+- 获用户明确确认后，从门户启动本实例cloudflared临时隧道，只转发127.0.0.1:8002；应用实际地址并通过HTTPS鉴权检查。8001仍仅回环访问，隧道进程由原门户登记管理。运行时地址保存在`.env.portal`及`data/portal-runtime/managed-tunnel.json`，不写入可提交配置。
+- 从本机`GET /api/setup/workflow.yml`生成当前环境的无密钥DSL，保存为`data/portal/workflows/portal.configured.yml`，仅把新应用名称区分为“机械设备安全评估（本机20260922）”。验证19节点、7个输入、专用dataset绑定、无任何当前密钥；经浏览器实际导入Dify。核对两个LLM节点为Qwen/Qwen3.5-27B并启用start.images视觉输入，检索节点绑定本实例高质量混合检索知识库；结构与版本过滤沿用门户生成器和原契约。
+- Dify首次发布前无法操作Web App开关。按用户明确确认，在证据Secret为空且无已发布知识版本时发布版本1，随即停用公开Web App。用户自行创建新应用API Key并保存到本机草稿，又将本机证据token填写到Dify Secret；本机应用草稿完成后发布Dify版本2。浏览器重新读取访问点，确认Web App停用、后端API启用、MCP停用；未配置工具或Marketplace发布。运维确认记录依据实际浏览器核对与用户的凭据填写确认，不声称为Service API自动验证。
+- 除本机诊断外，实际从Dify单独运行“检查证据服务”HTTP节点：节点SUCCESS、1.492s、0模型token，收到HTTP503、status=not_ready、database=true、snapshot_available=false、authentication_configured=true。这验证云端可达本机，503表示新实例未发布知识版本。
+- 单独运行Dify“保存完整证据”HTTP节点，以明确无效的空JSON `{}` 检查Secret与鉴权：节点SUCCESS、0.419s、0模型token，实际返回HTTP422/schema_validation_error及缺失字段，未返回401。请求在参数校验阶段终止，没有创建证据上下文或报告；未改变节点请求结构，也未运行视觉/评估模型。此为连接/鉴权负例，不是业务完整流程验收。
+- 最终通过门户“检查已应用配置”执行并保存诊断：**12项pass，0项fail，1项pending（workflow.end_to_end）**；含Workflow真实鉴权、已发布七输入契约、本机和HTTPS鉴权。页面实查与`GET /api/diagnostics`一致，结果在`data/local-install/diagnostics-final.json`及`final-summary.json`。工作区测试仍为前一阶段的196项通过；本阶段未更改应用代码或依赖，无需重复同一测试。
+- SQLite只读回读：documents/releases/clauses/evidence_contexts/reports均为0，当前无排队/运行任务。门户、独立worker、8002与托管隧道保留运行；用户可开始上传标准并人工复核。尚缺合法业务PDF、批准条款、检索标注、已发布版本与同设备真实图片，未生成首份真实报告；模型调用权限/额度和实际评估效果仍需真实报告验证。阶段E不在本次范围。
+- 下次启动使用`pwsh -NoProfile -File deploy/start-portal.ps1`；当前服务已运行，无需重复启动。停止使用`pwsh -NoProfile -File deploy/stop-portal.ps1`（可先加`-WhatIf`）；完整停止后临时HTTPS会失效，下次需重新建立并同步Dify环境变量、发布更新。安装记录按两个本地Git阶段提交，系统未配置作者身份时仅为这两次提交使用`Codex <codex@local.invalid>`，没有更改全局Git身份或推送远端。
+
+## 桌面资料包真实测试 — 恢复、批量解析与人工复核（2026-09-22）
+
+- 用户提供桌面 `RAG-Dify_测试资料_20260922_171843.zip` 并要求进行测试。本轮沿用已配置的Dify Cloud/门户环境及阶段D边界；基线f07089b，创建本地分支codex/material-tests-20260922。所有检查脚本使用本目录.venv，实际解析由门户单worker调用独立.venv-mineru 4.0.2完成。
+- 原ZIP为18,036,940字节，SHA-256为67ae4e9b4e8a9a501e501339b1f628a8aa1f10aaa845636ea98dc04fae94b7c2。中央目录列出37项，但大部分文件头偏移错误；标准zipfile逐项读取只有5项成功。保留桌面原包，从实际本地文件头恢复数据，逐项核对长度/CRC及包内manifest SHA-256。恢复36项，其中35项非manifest文件均与清单哈希一致；另保存可正常解压的`data/desktop-test-20260922/test-materials-recovered-PARTIAL.zip`，明确是缺1份PDF的部分恢复包。
+- 唯一无法恢复项为`test_files/2/GB18209.2-2010《机械电气安全指示、标志和操作.pdf`；两处同名压缩流分别出现invalid distance/invalid code lengths，不能通过CRC/SHA验证，未将损坏内容冒充PDF投入测试。已提示用户补充完整原PDF。恢复、压缩流审计与文件验证记录位于data/desktop-test-20260922；未从其他来源替换这一标准。
+- 内置浏览器实际一次多选并上传7份已校验原PDF。7项全部接收，独立worker依次完成标准档all/zip/auto实际解析，共206页，页覆盖均完整、missing_pages均为空。候选数分别为GB/T8196-2018：133（34页）；GB/T42596.3-2023：69（36页）；GB15760-2004：157（25页）；GB28241-2012：203（36页）；GB16754-2021：54（14页）；GB16454-2008：102（10页）；GB15760-2025：219（51页），共937条。完整解析不代表文本、状态或适用性已审核，其他六份均保持0批准。记录parse-results.json。
+- 对GB/T8196-2018原PDF重新渲染封面及第6、13～17页，和随包原签核10条逐项比较：源PDF哈希、来源块、页码及bbox全部一致；8条逐字一致，5.1.2缺少原列举符号，5.3.13多一个跨页换行。本轮只恢复原签核文本，不由模型改写。2026-09-22在线查询包内官方状态URL仍显示现行；状态、来源、范围、10条全文/依赖、两处差异和15题预期均写入本次人工确认单，先交用户核对。
+- 用户明确回复“已核对，确认仅沿用这10条和15题并继续测试”后，经门户既有metadata/edit/approve接口记录新实例批准和审计；没有复制数据库或直接写批准状态。10条原文SHA-256、必要上下文保持与随包签核相同，记录本次确认日期；发布预览无阻塞，按原15条人工标注提交索引、自检、发布任务。其余927候选仍待复核。记录review-plan.json、approval-and-publish.json及release-preview.json。
+- 对同一GB/T8196原PDF改名再通过实际上传API提交，返回reused=true、原文档及原解析任务；文档总数仍7，revision和完整payload未变，10条批准保留。记录duplicate-upload.json。没有为本轮运行配置/资料变化重跑同一组代码单元测试；后续检索与真实图片结果单独记录。
+
+### 桌面资料包真实测试 — 发布、报告与范围负例（2026-09-22）
+
+- 10条已批准语料经真实Dify建索引、分块映射及rag_snapshot_id过滤校验后发布为portal_f9d0b378d2fc8ad1edef8250。原15道人工标注未改预期：12道可回答题Top-5命中率与目标完整召回率均1.0，技术错误0；3道无答案题仍有相似候选（no_answer_candidate_rate=1.0），不将此解释为回答正确或无答案识别成功。真实评测记录在data/desktop-test-20260922/retrieval-results.json，索引清单状态verified。
+- 单图由内置浏览器选择hwacheon-overview.jpg、填写包内技术测试工况并提交。job_cfb7d22ae1de4c5494d536661f7710de，Dify run fd885a43-2475-49be-b534-3130fc9bdeb5，实际312.509488秒成功；报告rpt_91656aaa761e482ba59b92d911fbf777。六项检查中4项insufficient_evidence、2项needs_confirmation，始终pending_review。完整报告JSON（ensure_ascii=False、sort_keys=True序列化）的SHA-256为5604b998257c92f23ca2f2f311917def243e450462835ce6fddbd55d9d3ef5b1。
+- 双图按包内input.multi.json通过原门户评估API提交，顺序为整机图、主轴箱注释图。job_8295a7147ed74b5688be6cd6273761c9，run 8df19ed2-cbf8-4dfb-91cb-4c4291493d0d，301.597132秒成功；报告rpt_dee1601fec18457a8f14391579ffa093，六项均needs_confirmation、pending_review。相同JSON序列化SHA-256为803308a1495578cf321fcbb092d7940c4c13bebfc96cc5b6be92af0d89bda320。耗时仅为本次实测，不构成性能承诺。
+- 两份报告均从门户HTTP回读，再与SQLite保存的report_json逐字结构比较；validation_passed=true、六个check_id集合完整、request_id/快照/图片file_ref及顺序匹配。每份18处引用的条款原文及SHA-256均与用户确认的原10条一致。报告Markdown/JSON和验证摘要保存在data/desktop-test-20260922/reports与assessment-verification.json，不提交Git。
+- 混设备负例使用整机图与另一台黄色Emco车床照片，按包内负例故意设置same_equipment_confirmed=true。job_22b01ae79deb43d197d21816c3f3eb39，run 71d797e2-1777-4d81-8919-b122709d193c，69.607139秒按预期在checks范围门禁失败，错误equipment_scope_error。视觉输出辨认出不同品牌、颜色和结构；未启动iteration/retrieval/prepare_http/assessment/finalize_http。数据库回读确认该run的证据上下文为0、未生成报告，报告入口返回409。没有重试这个预期失败；脱敏诊断包已保存。
+- 浏览器实际查看单图与双图已保存报告，Markdown/JSON下载链接分别指向本次正确任务。打开混设备失败诊断时旧成功报告不可见，避免错关联；最终浏览器保留双图报告。最后实际诊断13项全部通过，workflow.end_to_end关联本次双图保存/回读记录；诊断自身仍model_invoked=false，没有冒充模型调用。
+- 最终状态：7份标准、937候选、10条批准、1个已发布知识版本、2个证据上下文、2份成功报告；当前无排队或运行任务。唯一未测输入是原ZIP中损坏的GB18209.2-2010，等待完整原文件。技术流程通过不证明模型部件识别、条款适用性或整改判断正确；公开历史照片不能代表当前现场。阶段E业务准确性评测未开展。面向用户的汇总为data/desktop-test-20260922/测试结果.md。
+- 本轮无应用代码或依赖更改，未重复已有196项单元测试；执行的是上述真实资料/云端联调、读回及负例验证。按阶段仅提交验收文档，服务和托管隧道保留运行，不推送远端。
+
+## 模型标识与证据状态约束修复（2026-09-23）
+
+- 用户要求修复重复上传图片时的工作流失败，验证通过后提交并推送。基线为本机`04956cd`，在独立工作树、`codex/workflow-output-guards`分支实施；沿用阶段D、既有10条人工批准语料和已发布快照，没有批准其他候选或扩展阶段E。
+- 从实际Dify追踪确认三种输出错误：上传UUID被用作image_id、`insufficient_evidence`状态词被用作evidence_id、`check_ids`字段名被用作检查项值。修复从模型输入、原生JSON Schema和运行时门禁三层约束标识；只对本次请求中可唯一定位的文件UUID精确转换，不猜测未知编号，不删除非法检查项或证据。
+- 模型输入去除内部条款UID、定位框、存档路径等易混淆元数据，保留完整原文、必要上下文、适用范围、标准状态及完整性缺失原因；完整证据上下文和请求绑定保持原样。提示词补充状态/证据分离、原文条件保留、未知事实和现场验证边界。已发布报告仍需专业复核。
+- 两个Qwen/Qwen3.6-27B节点使用相同生成Schema，同时配置Dify结构化输出与硅基流动原生`response_format=json_schema`、`strict=true`、`enable_thinking=false`。官方插件及SDK依据见`docs/versions.md`。Qwen3.5仅验证生成器契约，本轮未把它作为真实联调模型。
+- 初版修复发布为Dify版本5，运行`1d0d13d2-1080-4181-ad7f-aaeb7c026376`的评估节点只返回`text="{"`、`structured_output={}`、completion_tokens=1、finish_reason=null，被代码拒绝且无报告。保留此上游不完整输出失败，不作为成功，也不自动补全JSON或重新发起模型调用。
+- 版本5单图运行`dc6d660e-4377-49a8-aebc-427e0cd42380`成功，报告`rpt_9985aaff537741708217f358ad5514d3`，6项/8处引用；双图`6481fd77-a2cb-48bf-a409-08b02004a74c`成功，报告`rpt_4c5ed59623eb482ab2de18e5ff8a04ee`，6项/18处引用；混设备`9cceade3-d511-4e0a-9cb1-7a4a60f2ffba`按预期在范围门禁失败，无上下文或报告。
+- 版本5重复单图`c29a7976-325e-4630-9842-2708e5a9c633`又暴露状态/引用数量组合错误：guard_hazards选择needs_confirmation但evidence_ids为空，定稿HTTP422返回`missing_evidence`、字段`findings.guard_hazards.status`。服务端正确拒绝，无报告。进一步用两个Schema分支绑定状态与最小引用数量，代码节点提前检查，HTTP响应节点保留有限长度的错误code/field/message。此修订发布为版本6（workflow_id=`b98bf0e0-dde9-4b45-88ec-b50b293fee9a`）。
+- 本地执行`D:\RAG\.venv\Scripts\python.exe -X utf8 -m pytest -q`：**223 passed, 2 warnings in 23.49s**，包含原有整套测试、三类脱敏输出回归、精确图片映射/冲突拒绝、逐检查项证据归属、上下文完整性、不完整输出拒绝、状态与引用数量及HTTP错误诊断。两条为既有Starlette/httpx与AnyIO弃用警告。fixture明确为脱敏协议回归数据，不冒充真实设备判定。初次测试曾因旧版本号断言和模板占位符不匹配失败，修正预期与原占位符后全套通过。
+- 云端代码/提示词/两个Schema及原生参数通过浏览器回读核对；已更新相关节点后发布。第6版无密钥导出存于本机忽略目录`data/workflow-output-guards/after-cloud.yml`，SHA-256为`ff75fd4f9af9530341942f8df002fca6ddc98f732445f6432f71fe8b87a5fc7f`。公开模板仍使用占位符，未提交实例导出、API密钥、数据库、照片、PDF或报告。发布后访问点确认Web App=关闭、后端服务API=开启、MCP=关闭。
+- 最终第6版通过原门户`POST /api/assessments`提交真实图片：两次使用此前失败任务的相同单图/工况，再提交既有双图及混设备负例。单图运行`c1ae98ef-574b-443d-b009-ce2edb62a6c6`成功，报告`rpt_eb8f3130c81c43b9a19b59f00a415a44`，6项/17处引用，Markdown SHA-256=`fd2691bc9614f022d5a838db6202dc2908f8a2d430d05d587fbd3e08d82b5a7d`；重复单图`beefc7a1-b91d-4575-be93-409982721fe5`成功，报告`rpt_f12c5ce85b9b4b9196ae9bf351472747`，6项/18处引用，SHA-256=`31e68774276de3d22f9f7bca033dd7c62651e111e3efb0f9785cabcb7114dfe5`。
+- 最终双图运行`6bf63d55-e445-4a42-8f6b-6741da7ea2a0`成功，报告`rpt_dac94c64e53f479fbd316cf7e1df5e83`，6项/18处引用，Markdown SHA-256=`7fe2695e8c4f1657a3aa762524007062749580acf19c359828e48dd0dacc4552`。混设备`e665e841-1207-4c20-9646-42e1c0cf6bf5`按预期返回equipment_scope_error，未启动检索/评估/定稿、证据上下文0、报告0，报告入口409。这是范围门禁通过，不计为异常失败。
+- 使用本机`.venv`执行忽略目录`data/workflow-output-guards/audit_live.py`并读取HTTP及两份SQLite：最终三份成功报告validation_passed=true、pending_review，六项覆盖、逐项allowed_evidence_ids、观察归属、图片编号/上传顺序、请求/快照/模型/工作流版本一致；所有引用原文和上下文哈希匹配批准条款，HTTP与SQLite报告一致。原有3份报告原始JSON哈希、10条批准条款全文哈希保持不变；结果保留在`live-verification.json`。运行历史中的失败未删除。
+- 剩余风险：以上证明本实例的技术链路和已知错误门禁通过有限次实测，不保证模型永不返回不完整内容，也不证明部件识别、适用性或建议准确。结构错误继续拒绝，未增加自动重试费用或模型自我修复循环；所有报告须人工复核。阶段E仍未开展，原资料包损坏PDF仍待补充。
+- 修复落到`D:\RAG`后，在任务队列为空时仅重载本实例门户8001；按登记PID、创建时间及监听进程父子关系核对身份，保留证据服务、worker和托管隧道。重新读取`/api/setup/workflow.yml`确认原生JSON Schema、状态分支及定稿代码均为新生成器；隧道地址未变。执行`.venv\Scripts\python.exe -X utf8 -m app.portal.cli doctor`，13项全部pass、parse/publish/assess门禁全开，end_to_end关联本轮双图报告；诊断本身model_invoked=false。重载后再次执行报告审计通过。
+- `git diff --check`通过；对135个跟踪/新增源码文件扫描当前本机密钥，匹配0；两份公开DSL无运行密钥或临时域名。Git CLI的非交互push dry-run因本机未配置GitHub凭据失败，因此选用用户已连接的GitHub插件发布专用修复分支，并核对远端树与本机已验证提交完全一致；未更改默认分支，也不在聊天或提交中传递访问令牌。

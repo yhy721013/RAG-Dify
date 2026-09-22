@@ -45,14 +45,15 @@ def test_native_uploaded_file_contract(workflow_data):
     arguments["images"] = fixture["files"]
     result = nodes.validate_input(**arguments)
     manifest = json.loads(result["image_manifest_json"])
-    assert manifest == [{"image_id": "image_001", "position": 1, "file_ref": "real-upload-redacted-001"}]
-    assert json.loads(result["request_json"])["image_manifest"] == manifest
+    assert manifest == [{"image_id": "image_001", "position": 1}]
+    assert json.loads(result["request_json"])["image_manifest"] == [
+        {"image_id": "image_001", "position": 1, "file_ref": "real-upload-redacted-001"}]
 
 
 def test_workflow_nodes_to_authoritative_report(client, workflow_data):
     source, arguments, initial, built = built_request(workflow_data)
     VisionResult.model_validate(source["vision"])
-    manifest = json.loads(initial["image_manifest_json"])
+    manifest = json.loads(initial["request_json"])["image_manifest"]
     assert [(row["image_id"], row["file_ref"]) for row in manifest] == [("image_001", "synthetic-file-1"), ("image_002", "synthetic-file-2")]
     assert len(built["checks"]) == 6
     observations = json.loads(built["observations_json"])

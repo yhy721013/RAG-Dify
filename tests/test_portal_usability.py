@@ -242,7 +242,7 @@ def test_setup_api_does_not_expose_secrets_or_allow_csrf(environment):
         assert response.status_code == 200
         dsl = client.get("/api/setup/workflow.yml?source=draft&draft_id=" + response.json()["id"])
         assert dsl.status_code == 200 and not any(secret in dsl.text for secret in config.secret_values())
-        assert "portal-v1" in dsl.text and "diagnostic_mode" not in dsl.text
+        assert "portal-v2-identifiers" in dsl.text and "diagnostic_mode" not in dsl.text
 
 
 def test_worker_does_not_own_portal_control_processes(environment):

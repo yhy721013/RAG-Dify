@@ -57,3 +57,10 @@
 交付workflows/portal.template.yml为无密钥、无实例绑定模板，workflows/build_portal.py生成本机候选。真实导入运行文件保存在忽略目录；不把模板声称为已绑定其他开发者环境。Dify Cloud的实例commit和容器镜像仍不可由当前接口验证。
 
 易用性轮次仍采用上述依赖/Workflow 图，未新增 Python 或前端运行依赖。托管隧道工具固定 cloudflared 2026.9.1 Windows x64，SHA-256 为 `2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712`，本实例登记改用 `data/portal-runtime/managed-tunnel.json`。2026-09-20 新的真实单图运行用时 102.371 秒，成功回读保存报告；时延仅作为该次记录。
+
+## 输出标识修订基线（2026-09-23）
+
+- 应用依赖与数据库结构不变；门户Workflow标记为`portal-v2-identifiers`，六输入维护模板为`stage-d-v4-identifiers`。新增检查项枚举、图片/证据标识格式以及原生Schema生成参数。
+- 本轮云端验证模型为`langgenius/siliconflow/siliconflow`的`Qwen/Qwen3.6-27B`；Qwen3.5-27B保留生成契约覆盖，不将其旧普通输出验收冒称本轮原生Schema实测。
+- 官方模型声明：Qwen3.6-27B文件blob `28b5563636b10d6ac6ccb1bdd6e84d0627c0b834`，Qwen3.5-27B文件blob `c5aa85ed1271fef6473bb3e002467d7d237dfcb5`，均声明response_format/json_schema及enable_thinking参数。提供方SDK将json_schema字符串解析并传入response_format对象；参考[dify-plugin-sdks固定源码](https://github.com/langgenius/dify-plugin-sdks/blob/a501aaeb33e0a527a7be89ac03bb23c3be9f25ed/src/dify_plugin/interfaces/model/openai_compatible/llm.py)。
+- 接口依据：[SiliconFlow Chat Completions](https://docs.siliconflow.cn/docs/api/chat-completions-post)、[JSON模式与不完整输出限制](https://docs.siliconflow.cn/docs/userguide/guides/json-mode)。声明支持结构化输出不等于所有请求永不失败；完整性和引用授权继续由工作流与服务端校验。实际通过、失败及剩余风险均记录在本轮acceptance条目。

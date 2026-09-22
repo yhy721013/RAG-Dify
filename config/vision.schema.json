@@ -4,11 +4,16 @@
       "additionalProperties": false,
       "properties": {
         "image_ids": {
+          "description": "只复制本次图片清单的 image_id；不能填写文件UUID、文件名或字段名。",
           "items": {
-            "maxLength": 160,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9_.:-]+$",
-            "type": "string"
+            "pattern": "^image_00[1-4]$",
+            "type": "string",
+            "enum": [
+              "image_001",
+              "image_002",
+              "image_003",
+              "image_004"
+            ]
           },
           "maxItems": 4,
           "minItems": 1,
@@ -41,11 +46,20 @@
           "type": "array"
         },
         "check_ids": {
+          "description": "只选择固定清单中的 check_id；无关联时填写 []，禁止把 check_ids 字段名当作值。",
           "items": {
             "maxLength": 160,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9_.:-]+$",
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "guard_hazards",
+              "guard_joints",
+              "guard_access",
+              "guard_durability",
+              "fixed_guard",
+              "movable_guard"
+            ]
           },
           "maxItems": 6,
           "title": "Check Ids",
