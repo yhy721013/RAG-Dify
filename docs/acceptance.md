@@ -1,5 +1,15 @@
 # 分阶段验收记录
 
+## 批处理入口阶段交付（2026-09-26，自动模式未完成）
+
+- 用户授权新增脚本入口及免逐条人工审核的自动入库模式。修改 ClauseRecord 新增 machine_checked/automated 状态时被自动审批检查拒绝，理由为与 AGENTS.md 的“条款只能在人工复核后导入”冲突；该补丁未落盘。没有绕过审批或伪造批准记录，自动后端模式仍阻塞。
+- 已完成不受阻塞部分：`app/portal/batch.py` 提供 ingest/preview/publish/status，通过原门户 API 自动建立本机会话、携带 Origin/Cookie/CSRF；按哈希去重并持久化批次清单，上传后等待原解析任务，失败文件不阻止后续文件，导出复核数据。publish 仍要求现有人工批准集合与人工核对的 cases，不具备免审核能力。
+- 发布前落盘请求意图；响应丢失保留未知结果并拒绝自动重发。上传响应丢失可由原服务端哈希去重恢复。客户端不管理 worker、不改 SQLite、不调用批准接口。前端、DSL、证据契约、历史报告保持原样。
+- 实测命令：`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_batch.py` → 4 passed；`.\.venv\Scripts\python.exe -X utf8 -m pytest -q` → **227 passed, 2 warnings in 14.87s**；`.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch --help` 正常。两个警告为既有 Starlette/httpx 与 AnyIO 弃用提示。`git diff --check` 通过。
+- 新测试使用 MockTransport 和合成数据，覆盖本机会话、远程地址拒绝、重复上传/断点继续、失败解析隔离、未知发布结果禁止重发；没有执行真实 PDF 解析、Dify 入库或产生模型费用，不声称真实业务验收。
+- 使用方法见 `docs/batch-runbook.md`。清单和导出的复核正文应放 data/batch，不能进 Git。同一清单只允许一个客户端运行；服务重启后需重新执行命令取新会话；发布拒绝也保守保留意图，需对账后处理。
+- 剩余工作：自动状态与来源记录、机器检查规则、自动模式发布/证据/报告兼容、自动检索冒烟、对应测试及真实联调。需先解决免人工审核模式的审批阻塞。本轮未改动运行服务和已有业务数据。
+
 目标范围：阶段 A～D 已完成本轮限定范围内的技术验收，不进入阶段 E。当前根目录即指南中的 `mechanical-safety-rag/`。
 所有终端命令使用 PowerShell 7；测试使用 `D:\RAG-Dify\.venv`。
 
