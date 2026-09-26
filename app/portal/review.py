@@ -219,7 +219,7 @@ def merge_candidates(payload, candidate_ids, root):
     return result
 
 
-def release_preview(store, evidence_repo, document_ids):
+def release_preview(store, evidence_repo, document_ids, *, machine_records=None):
     parent = store.state("current_snapshot")
     baseline = evidence_repo.all_clauses(parent) if parent else []
     records, pending_count, revisions = [], 0, {}
@@ -232,6 +232,8 @@ def release_preview(store, evidence_repo, document_ids):
                 records.append(deepcopy(record))
             else:
                 pending_count += 1
+    if machine_records is not None:
+        records = deepcopy(machine_records)
     if not records:
         raise DomainError("review_required", "所选标准尚无人工批准条款")
     incoming = {row["standard_uid"] for row in records}
@@ -261,6 +263,8 @@ def release_preview(store, evidence_repo, document_ids):
     locations = {item["record"].get("clause_uid"): {"document_id": doc["id"], "candidate_id": item["id"]}
                  for doc in location_docs for item in doc["payload"].get("candidates", [])}
     blockers = []
+    if machine_records is None and any(r["content_review_status"] == "machine_checked" for r in combined):
+        blockers.append({"code": "automated_mode_required", "message": "基础版本含未经人工复核条款，请显式使用自动模式或用人工批准集合替换对应标准"})
     def block(record, code, message, target=None):
         blockers.append({"code": code, "clause_uid": record["clause_uid"], "clause_no": record["clause_no"],
             "standard_code": record["standard_code"], "message": message, **locations.get(target or record["clause_uid"], {})})

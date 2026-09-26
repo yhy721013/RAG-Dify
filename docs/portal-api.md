@@ -2,6 +2,10 @@
 
 本文件只描述本项目新入口。原证据服务四个接口不变，继续参照指南和 `config/*.schema.json`。
 
+2026-09-26 显式自动模式扩展：`POST /api/releases/preview` 与 `POST /api/releases` 新增可选 `mode`（`manual` 默认 / `automated`）和 `metadata`（文档 ID → standard_code/standard_name/edition/scope 字符串对象）。旧客户端默认人工模式。自动模式不接受 actor/cases/case_draft_id/confirmed_case_ids；服务端生成机器检查集合与原文回查题，不伪造复核人。预览返回 mode、machine_check_version、metadata_provenance、excluded、notice；原 preview_hash、依赖门禁与替换确认仍有效。全部条款不通过时返回422 machine_check_required，身份或范围缺失返回422 metadata_required，缺失字段见 details。排队后文档 revision 变化时 worker 拒绝导入；失败任务沿用原恢复接口。发布结果标记 automated_smoke / human_reviewed=false。
+
+ClauseRecord 增加 machine_checked 审核及边界状态，未新增数据库列。自动条款 evidence_complete=false、reviewed_by/at 为空。人工默认导入仍拒绝机器条款。门户证据允许已发布机器快照，completeness_issues 明示未经人工复核；上下文和 JSON 报告对含机器条款的版本增加 knowledge_review_status=human_review_required，Markdown 报告显示同样说明。现有四个证据路由、请求字段和 Workflow 七输入契约不变；已有报告和默认人工条款序列化不增加字段。自动回查记录不冒充人工评测，详情见 batch-runbook.md。
+
 Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、HttpOnly 本机会话，并返回 `csrf_token`；写请求必须携带同一来源 Origin、会话 Cookie 和 `X-CSRF-Token`，浏览器不保存 Dify 或证据密钥。不接受外部 Host。CSRF token 随服务重启变更，页面刷新后重新获取。
 
 | 方法 / 路径 | 请求 / 响应 |

@@ -1,5 +1,16 @@
 # 分阶段验收记录
 
+## 显式自动入库模式阶段交付（2026-09-26）
+
+- 用户在前次审批阻塞后明确授权修改 AGENTS.md：人工模式保留；自动模式允许机器检查通过但未经人工复核的条款入库，不伪造批准。AGENTS.md 和 portal-plan.md 已同步。下方“自动模式未完成”是本次之前的历史记录，已由本节覆盖。
+- 新增 `app/portal/automated.py`：仅处理副本，规则预填身份/范围、补充父条款/范围/正文引用依赖；来源、页覆盖、未知边界、资产、规则疑点不放行。排除集合及原因入预览/任务；依赖不完整、循环、重复身份阻止发布。元数据不明时通过命令行 JSON 补充，不猜测现行状态。机器条款持久化为 machine_checked，evidence_complete=false，无人工复核人和日期，原候选与人工历史保持不变。
+- 原发布 API 新增默认兼容的 mode/metadata 字段；明确选择 automated 才启用机器集合和自动原文回查。手工模式保持人工问题签核要求。worker 排队后检查文档 revision，导入再次验证 PDF/资产哈希、页数、依赖和不可变快照；Dify 仍使用同一专用库和 rag_snapshot_id 分区，不切换知识库、不删除历史分区。自动原文回查独立标记 automated_smoke / human_annotated=false，不能冒充业务评测。
+- 新增批处理 auto 子命令：目录上传、哈希去重、解析等待、预览落盘、发布、任务汇总。已提交清单重复执行只查询原任务；不同批次用不同清单，同库累积新版本。同标准集合替换要求 --confirm-replacements；未变化集合不建新索引。保留发布意图及未知结果禁止重发规则。CSRF/Origin/Cookie 与本机限制不变。
+- 证据服务接纳门户已发布机器条款但保持不完整，模型收到 completeness_issues；JSON/Markdown 报告标明未经人工复核。现有 evidence_supported_risk 完整性门禁不放宽。Workflow 节点与七输入契约未改变，无新增前端页面，无数据库列迁移，旧报告不重写。
+- 实测：`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_automated.py tests/test_portal_batch.py` → **20 passed**；`.\.venv\Scripts\python.exe -X utf8 -m pytest -q` → **243 passed, 2 warnings in 36.24s**；`.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch auto --help` 正常；`git diff --check` 通过。两个警告为既有 Starlette/httpx 与 AnyIO 弃用提示。
+- 新增16项离线测试覆盖：机器状态/不改原审核、默认人工导入拒绝机器记录、重复导入不可变、缺页/损坏来源/资产/未知边界/已拒绝/拆分/疑似空页阻断、必要依赖缺失、API重复提交/旧预览/替换确认/伪复核人拒绝、排队后修改拒绝、模拟Dify两批同库累计与旧版不变、机器证据/报告标记、风险判定门禁、自动CLI重复执行与未知结果不重发。
+- 限制：测试全部使用合成 PDF、临时 SQLite 和 MockTransport，不代表真实 MinerU/Dify/模型业务联调；未操作运行中业务库、配置、密钥或真实任务。规则保守，复杂图表/跨页/未识别边界可能需要人工处理；自动回查最多100题、累计最多100个标准，仅测原文片段回查，不测业务准确率。累计版本会重复占用 Dify 索引资源，未新增历史清理。更新后须在任务空闲时重启门户、证据服务和 worker。操作说明与元数据补充格式见 docs/batch-runbook.md。
+
 ## 批处理入口阶段交付（2026-09-26，自动模式未完成）
 
 - 用户授权新增脚本入口及免逐条人工审核的自动入库模式。修改 ClauseRecord 新增 machine_checked/automated 状态时被自动审批检查拒绝，理由为与 AGENTS.md 的“条款只能在人工复核后导入”冲突；该补丁未落盘。没有绕过审批或伪造批准记录，自动后端模式仍阻塞。

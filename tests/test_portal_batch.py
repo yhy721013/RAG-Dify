@@ -4,9 +4,44 @@ import json
 import httpx
 import pytest
 
-from app.portal.batch import BatchClient, ingest, publish
+from app.portal.batch import BatchClient, automated, ingest, publish
 from app.repository import sha256
 from ingestion.mineru_adapter import file_sha256
+
+
+def test_auto_upload_publish_and_resume_without_resubmission(tmp_path):
+    source = tmp_path / "pdfs"
+    source.mkdir()
+    (source / "one.pdf").write_bytes(b"synthetic")
+    checksum = file_sha256(source / "one.pdf")
+    calls = []
+    def handle(request):
+        calls.append((request.method, request.url.path))
+        if request.url.path == "/api/documents":
+            return httpx.Response(200, json={"document_id": "pdf_test", "reused": False, "parse_job": {"id": "parse"}})
+        if request.url.path == "/api/documents/pdf_test":
+            return httpx.Response(200, json={"sha256": checksum, "payload": {"candidates": [{}], "normalized": {"full_document_covered": True}}})
+        if request.url.path == "/api/releases/preview":
+            assert json.loads(request.content)["mode"] == "automated"
+            return httpx.Response(200, json={"preview_hash": "h", "blockers": [], "unchanged": False, "replacements": [], "excluded": []})
+        if request.url.path == "/api/releases":
+            body = json.loads(request.content)
+            assert "actor" not in body and "cases" not in body
+            return httpx.Response(200, json={"id": "publish", "status": "queued"})
+        return httpx.Response(200, json={"id": request.url.path.rsplit("/", 1)[1], "status": "succeeded"})
+    api = BatchClient(client=httpx.Client(base_url="http://127.0.0.1:8001", transport=httpx.MockTransport(handle)))
+    manifest = tmp_path / "batch/manifest.json"
+    assert automated(api, source, manifest, 1)["status"] == "succeeded"
+    assert automated(api, source, manifest, 1)["status"] == "succeeded"
+    assert calls.count(("POST", "/api/releases")) == 1
+    assert calls.count(("POST", "/api/documents")) == 1
+    state = json.loads(manifest.read_text(encoding="utf-8"))
+    del state["publish_intent"]["job_id"]
+    manifest.write_text(json.dumps(state), encoding="utf-8")
+    with pytest.raises(ValueError, match="结果未知"):
+        automated(api, source, manifest, 1)
+    assert calls.count(("POST", "/api/releases")) == 1
+    api.close()
 
 
 def test_local_session_and_no_remote_endpoint():

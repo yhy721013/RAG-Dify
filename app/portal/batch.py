@@ -1,4 +1,4 @@
-"""本地门户批处理客户端；使用原 API，不改写审核、任务或发布状态。"""
+"""本地门户批处理客户端；auto 显式使用机器检查模式，不伪造人工批准。"""
 import argparse
 import json
 import time
@@ -40,7 +40,7 @@ class BatchClient:
             detail = value.get("error", {})
             raise DomainError(detail.get("code", "batch_http_error"),
                               detail.get("message", f"HTTP {response.status_code}"),
-                              status=response.status_code)
+                              status=response.status_code, details=detail.get("details", {}))
         return value
 
     def wait(self, job_id, timeout, interval=2):
@@ -148,6 +148,50 @@ def publish(api, preview_path, cases_path, actor, confirm_replacements, manifest
     return result
 
 
+def automated(api, directory, manifest_path, timeout, recursive=False, metadata_path=None,
+              confirm_replacements=False):
+    manifest = load_manifest(manifest_path, api.origin)
+    intent = manifest.get("publish_intent")
+    if intent:
+        if not intent.get("job_id"):
+            raise ValueError("已有结果未知的发布意图，请先用 status 和任务页对账，不重发")
+        # 同一批次重启只等待原任务；新增文件使用另一个批次清单。
+        result = api.wait(intent["job_id"], timeout)
+        intent.update(status=result["status"], result=result.get("result"), error=result.get("error"))
+        atomic_json(manifest_path, manifest)
+        return result
+    manifest = ingest(api, directory, manifest_path, timeout, recursive)
+    if any(r["status"] != "parsed" for r in manifest["files"]):
+        return {"status": "needs_attention", "files": manifest["files"]}
+    supplied = json.loads(metadata_path.read_text(encoding="utf-8-sig")) if metadata_path else {}
+    if not isinstance(supplied, dict):
+        raise ValueError("metadata 须为按文档 ID 或文件 SHA-256 索引的对象")
+    entries = manifest["files"]
+    known = {r[k] for r in entries for k in ("document_id", "sha256")}
+    if set(supplied) - known:
+        raise ValueError("metadata 包含不属于本批次的文档 ID 或 SHA-256")
+    metadata = {r["document_id"]: supplied.get(r["document_id"], supplied.get(r["sha256"], {})) for r in entries}
+    payload = {"document_ids": sorted({r["document_id"] for r in entries}), "mode": "automated", "metadata": metadata}
+    value = api.request("POST", "/api/releases/preview", json=payload)
+    atomic_json(manifest_path.parent / "automated-preview.json", value)
+    if value.get("blockers"):
+        return {"status": "blocked", "blockers": value["blockers"], "excluded": value.get("excluded", [])}
+    if value["unchanged"]:
+        return {"status": "unchanged", "snapshot_id": value["parent"]}
+    if value["replacements"] and not confirm_replacements:
+        raise ValueError("涉及同标准条款集合替换；查看 automated-preview.json 后用 --confirm-replacements 明确选择")
+    payload.update(preview_hash=value["preview_hash"], confirm_replacements=confirm_replacements)
+    manifest["publish_intent"] = {"mode": "automated", "preview_hash": value["preview_hash"], "status": "submitting"}
+    atomic_json(manifest_path, manifest)
+    job = api.request("POST", "/api/releases", json=payload)
+    manifest["publish_intent"].update(job_id=job["id"], status=job["status"])
+    atomic_json(manifest_path, manifest)
+    result = api.wait(job["id"], timeout)
+    manifest["publish_intent"].update(status=result["status"], result=result.get("result"), error=result.get("error"))
+    atomic_json(manifest_path, manifest)
+    return {**result, "excluded": value.get("excluded", [])}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--origin", default="http://127.0.0.1:8001")
@@ -163,9 +207,14 @@ def main():
     pub.add_argument("--actor", required=True)
     pub.add_argument("--confirm-replacements", action="store_true")
     status = sub.add_parser("status", help="只读查询批次原任务")
-    for cmd in (upload, pre, pub, status):
+    auto = sub.add_parser("auto", help="自动上传、解析、机器检查、索引回查和发布；未经人工复核")
+    auto.add_argument("--input-dir", type=Path, required=True)
+    auto.add_argument("--recursive", action="store_true")
+    auto.add_argument("--metadata", type=Path, help="按文件 SHA-256 或文档 ID 补充身份与范围的 JSON")
+    auto.add_argument("--confirm-replacements", action="store_true")
+    for cmd in (upload, pre, pub, status, auto):
         cmd.add_argument("--manifest", type=Path, required=True)
-    for cmd in (upload, pub):
+    for cmd in (upload, pub, auto):
         cmd.add_argument("--timeout", type=int, default=14400)
     args = parser.parse_args()
     api = BatchClient(args.origin)
@@ -180,6 +229,9 @@ def main():
         elif args.command == "publish":
             result = publish(api, args.preview, args.cases, args.actor, args.confirm_replacements,
                              args.manifest, args.timeout)
+        elif args.command == "auto":
+            result = automated(api, args.input_dir, args.manifest, args.timeout, args.recursive,
+                               args.metadata, args.confirm_replacements)
         else:
             manifest = load_manifest(args.manifest, api.origin)
             ids = {row["job_id"] for row in manifest["files"] if row.get("job_id")}
@@ -192,8 +244,10 @@ def main():
             raise SystemExit(2)
         if args.command == "publish" and result["status"] != "succeeded":
             raise SystemExit(2)
+        if args.command == "auto" and result.get("status") not in {"succeeded", "unchanged"}:
+            raise SystemExit(2)
     except (DomainError, ValueError, OSError, httpx.HTTPError) as error:
-        print(json.dumps({"error": str(error) if not isinstance(error, httpx.HTTPError) else
+        print(json.dumps({"error": error.detail() if isinstance(error, DomainError) else str(error) if not isinstance(error, httpx.HTTPError) else
                           "网络请求失败；已保存批次清单，请查询原任务"}, ensure_ascii=False))
         raise SystemExit(2) from error
     finally:

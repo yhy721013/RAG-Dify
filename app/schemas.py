@@ -126,10 +126,10 @@ class ClauseRecord(StrictModel):
     asset_refs: list[str] = Field(default_factory=list)
     asset_sha256: dict[str, str] = Field(default_factory=dict)
     context_clause_uids: list[str] = Field(default_factory=list)
-    content_review_status: Literal["pending", "approved", "rejected"] = "pending"
+    content_review_status: Literal["pending", "approved", "rejected", "machine_checked"] = "pending"
     evidence_complete: bool = False
     is_test_fixture: bool = False
-    boundary_status: Literal["pending", "confirmed", "unknown"] = "pending"
+    boundary_status: Literal["pending", "confirmed", "unknown", "machine_checked"] = "pending"
     review_issues: list[str] = Field(default_factory=list)
     reviewed_by: str = ""
     reviewed_at: str = ""

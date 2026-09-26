@@ -27,7 +27,9 @@ def read_records(input_file: Path):
     return [ClauseRecord.model_validate_json(line) for line in input_file.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def import_reviewed(input_file, snapshot_id, repo, settings):
+def import_reviewed(input_file, snapshot_id, repo, settings, *, mode="manual"):
+    if mode not in {"manual", "automated"}:
+        raise DomainError("input_error", "未知入库模式")
     TypeAdapter(ID).validate_python(snapshot_id)
     records = read_records(input_file)
     if not records:
@@ -36,16 +38,20 @@ def import_reviewed(input_file, snapshot_id, repo, settings):
     for record in records:
         if record.is_test_fixture and settings.app_env != "test":
             raise DomainError("test_fixture_forbidden", "真实知识库不接收测试数据")
-        required = ("standard_code", "standard_name", "edition", "scope", "reviewed_by", "reviewed_at",
+        machine = mode == "automated" and record.content_review_status == "machine_checked"
+        required = ("standard_code", "standard_name", "edition", "scope") if machine else ("standard_code", "standard_name", "edition", "scope", "reviewed_by", "reviewed_at",
                     "status_verified_at", "status_source")
-        if any(not getattr(record, key).strip() for key in required) or record.standard_status == "unknown":
+        if any(not getattr(record, key).strip() for key in required) or (not machine and record.standard_status == "unknown"):
             raise DomainError("review_required", "需填写标准元数据、状态来源和人工复核记录")
-        for stamp in (record.reviewed_at, record.status_verified_at):
+        for stamp in (() if machine else (record.reviewed_at, record.status_verified_at)):
             try:
                 datetime.fromisoformat(stamp)
             except ValueError as error:
                 raise DomainError("review_required", "复核日期必须为 ISO 8601") from error
-        if (record.content_review_status != "approved" or not record.evidence_complete or
+        if machine:
+            from app.portal.automated import validate_machine_record
+            validate_machine_record(record.model_dump())
+        elif (record.content_review_status != "approved" or not record.evidence_complete or
             record.boundary_status != "confirmed" or record.review_issues or not record.full_document_covered):
             raise DomainError("review_required", "仅接受完整页覆盖、边界明确且无未解决问题的人工批准条款")
         if record.clause_no != record.clause_path[-1]:

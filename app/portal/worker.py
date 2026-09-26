@@ -119,6 +119,10 @@ def publish_release(job, store, config):
         return {"snapshot_id": snapshot, "published": True}
     if store.state("current_snapshot") != payload["parent"]:
         raise DomainError("release_conflict", "基础知识版本已变化，请重新预览后提交")
+    if payload.get("mode") == "automated":
+        for uid, revision in payload["document_revisions"].items():
+            if store.document(uid)["revision"] != revision:
+                raise DomainError("revision_conflict", "排队后文档已变化，请重新生成自动发布预览", status=409)
     settings = config.evidence_settings()
     repo = Repository(settings.db_path)
     repo.initialize()
@@ -128,18 +132,23 @@ def publish_release(job, store, config):
     approved.write_text("".join(json_text(row) + "\n" for row in payload["records"]), encoding="utf-8")
     cases.write_text("".join(json_text(row) + "\n" for row in payload["cases"]), encoding="utf-8")
     store.progress(job["id"], "importing", {"snapshot_id": snapshot})
-    import_reviewed(approved, snapshot, repo, settings)
+    mode = payload.get("mode", "manual")
+    import_reviewed(approved, snapshot, repo, settings, mode=mode)
     with DifyClient(settings) as client:
         store.progress(job["id"], "indexing")
         sync_snapshot(snapshot, repo, settings, client)
         store.progress(job["id"], "evaluation")
-        result = evaluate(cases, repo, settings, client, interval_seconds=7)
+        result = evaluate(cases, repo, settings, client, interval_seconds=7, mode=mode)
         if not result["passed"]:
             raise DomainError("retrieval_gate_failed", "检索自检未通过；保留候选版本，不能用于评估")
         store.progress(job["id"], "publishing")
         activate_snapshot(snapshot, repo, settings, client)
     store.publish(job["id"], snapshot, payload["clause_count"], payload["standard_count"], payload["parent"])
-    return {"snapshot_id": snapshot, "published": True, "hit_at_5_rate": result["hit_at_5_rate"]}
+    outcome = {"snapshot_id": snapshot, "published": True, "hit_at_5_rate": result["hit_at_5_rate"]}
+    if mode == "automated":
+        outcome.update(mode=mode, evaluation_kind="automated_smoke", human_reviewed=False,
+                       excluded=payload.get("excluded", []), notice=payload["notice"])
+    return outcome
 
 
 def execute(job, store, config):

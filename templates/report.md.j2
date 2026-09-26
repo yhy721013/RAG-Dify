@@ -20,6 +20,10 @@
 
 ## 2. 本次范围与限制
 
+{% if report.get('knowledge_review_status') == 'human_review_required' %}
+**本次知识版本包含未经人工复核的机器处理条款。机器检查与自动检索回查不能证明原文正确、标准现行或适用；引用前须对照原 PDF 核实。**
+{% endif %}
+
 仅覆盖以下 {{ report.findings | length }} 个检查项及其引用标准。试点库不等于全部适用标准。
 图片无法证明全部工况或精确尺寸，不能据此作出设备整体合格结论。
 {% for check in report.request.checks %}
