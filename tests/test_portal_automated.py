@@ -124,6 +124,41 @@ def test_auto_api_worker_publish_evidence_report_and_second_batch(parsed, monkey
         assert report["snapshot_id"] == snapshot
 
 
+def test_failed_evaluation_archive_and_same_job_recovery(parsed, monkeypatch):
+    config, store, doc, supplied, repo = setup(parsed)
+    fake = PartitionDify()
+    unavailable = [True]
+
+    def handle(request):
+        if unavailable[0] and request.url.path.endswith("/retrieve"):
+            return httpx.Response(503, json={"code": "unavailable", "message": "synthetic"})
+        return fake.handle(request)
+
+    monkeypatch.setattr(worker, "DifyClient", lambda settings: DifyClient(settings, httpx.MockTransport(handle)))
+    monkeypatch.setattr("evals.evaluate_retrieval.time.sleep", lambda seconds: None)
+    with TestClient(create_app(config), base_url=config.origin) as api:
+        api.headers.update({"Origin": config.origin, "X-CSRF-Token": api.get("/api/status").json()["csrf_token"]})
+        body = {"document_ids": [doc["id"]], "mode": "automated", "metadata": supplied}
+        body["preview_hash"] = api.post("/api/releases/preview", json=body).json()["preview_hash"]
+        job = api.post("/api/releases", json=body).json()
+        worker.execute(store.job(job["id"]), store, config)
+        failed = store.job(job["id"])
+        assert failed["status"] == "failed" and not store.state("current_snapshot")
+        assert failed["result"]["completed"] == failed["result"]["total"]
+        snapshot = failed["result"]["snapshot_id"]
+        path = evaluation_path(config.evidence_settings(), snapshot)
+        prior = json.loads(path.read_text(encoding="utf-8"))
+        assert not prior["passed"] and all(len(row["attempt_errors"]) == 3 for row in prior["cases"])
+        documents = deepcopy(fake.docs)
+        unavailable[0] = False
+        api.post(f'/api/jobs/{job["id"]}/retry').raise_for_status()
+        worker.execute(store.job(job["id"]), store, config)
+        assert store.job(job["id"])["status"] == "succeeded" and fake.docs == documents
+        archive = list(path.parent.glob(path.stem + "_attempt_*.json"))
+        assert len(archive) == 1 and json.loads(archive[0].read_text(encoding="utf-8")) == prior
+        assert json.loads(path.read_text(encoding="utf-8"))["passed"]
+
+
 def test_stale_preview_and_replacement_and_stale_worker(parsed):
     config, store, doc, supplied, repo = setup(parsed)
     value = automated.preview(store, repo, [doc["id"]], config.data_root, supplied)

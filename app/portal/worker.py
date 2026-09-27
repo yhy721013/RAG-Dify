@@ -138,7 +138,10 @@ def publish_release(job, store, config):
         store.progress(job["id"], "indexing")
         sync_snapshot(snapshot, repo, settings, client)
         store.progress(job["id"], "evaluation")
-        result = evaluate(cases, repo, settings, client, interval_seconds=7, mode=mode)
+        result = evaluate(cases, repo, settings, client, interval_seconds=7, mode=mode,
+                          transient_retries=2 if mode == "automated" else 0,
+                          progress=lambda completed, total: store.progress(job["id"], "evaluation",
+                              {"snapshot_id": snapshot, "completed": completed, "total": total}))
         if not result["passed"]:
             raise DomainError("retrieval_gate_failed", "检索自检未通过；保留候选版本，不能用于评估")
         store.progress(job["id"], "publishing")

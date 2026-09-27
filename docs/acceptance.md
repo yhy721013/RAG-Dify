@@ -1,5 +1,13 @@
 # 分阶段验收记录
 
+## 真实自动入库检索恢复（2026-09-27）
+
+- 桌面8份PDF全部解析完成，共218页、962候选；自动预览纳入753条、排除209条。原专用Dify知识库内8份分区文档、755个分块均完成真实索引与映射回读，未切换知识库。
+- 首次100条自动原文回查通过live_service_api执行：89次正常响应均命中，10次请求超时、1次嵌入插件RemoteDisconnected。结果passed=false，hit_at_5_rate=null；发布任务因retrieval_gate_failed失败，快照仍candidate，没有绕过门禁或伪造成功。
+- 针对此真实临时故障，自动模式的只读检索最多重试2次，保留每次错误；401、普通400及映射错误不重试，长Retry-After保留失败。人工模式默认0重试不变。任务记录completed/total；旧完整评测按内容哈希归档后才写新结果，题目、预期条款、90%门槛和零技术错误要求不变。恢复仍使用原任务及已有索引，重新执行整组100题。
+- `.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_retrieval_retry.py tests/test_portal_automated.py tests/test_snapshot_partitions.py tests/test_dify_live_contracts.py`：**30 passed, 2 warnings in 6.90s**；覆盖超时后成功保留审计、重试上限、不可重试错误、插件断连及长限流等待。两条为既有弃用警告。此节尚不代表真实恢复发布成功，结果在后续补记。
+- 补充 `tests/test_portal_automated.py::test_failed_evaluation_archive_and_same_job_recovery`：**1 passed, 2 warnings in 2.42s**，实际模拟持续503阻止发布、检查进度、故障解除后同任务成功、远端文档不重复及旧失败评测完整归档。共31项相关测试通过。
+
 ## 真实批量入库准备及空页/依赖筛选修复（2026-09-27）
 
 - 随后真实范围条款的连续 `a) … b) …` 列项被旧括号计数误报为 sentence_fragment，导致所有依赖范围的条款被排除。现在只在行首标签从a连续排列且至少两项时，将标签从括号计数中扣除；原文不改写，真正未配对的正文括号、孤立标签和跳号仍报告疑点。`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_automated.py tests/test_portal_assistance.py` → **44 passed, 2 warnings in 16.66s**。修复后该标准预检181条可发布、22条排除、无依赖阻塞，此时尚未执行远端发布。为避免新旧规则混用，只停止本次尚无发布意图的 CLI 等待进程，后台解析继续，完成后按原清单恢复。
