@@ -1,5 +1,10 @@
 # 分阶段验收记录
 
+## 自动入库 PR 提交前验证（2026-09-27）
+
+- 对最终合并范围执行 `.\.venv\Scripts\python.exe -X utf8 -m pytest -q`：**255 passed, 2 warnings in 24.06s**，两条为既有第三方弃用警告；`git diff --check origin/main...HEAD` 通过。
+- 核对原6个待推送提交的变更文件：未包含业务PDF、数据库、解析包或运行配置；与当前运行密钥比对无命中。真实联调结果与限制见下节，离线测试不替代业务准确性验收。使用独立分支 `codex/automated-portal-ingestion` 提交PR，不直接更新远端main。
+
 ## 真实自动入库检索恢复（2026-09-27）
 
 - 最终真实恢复完成：使用 `.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch auto --input-dir 'C:\.me\dev\Desktop\documents' --manifest data/batch/desktop-documents-20260927/manifest.json --recursive` 跟踪原任务，经既有 `POST /api/jobs/{id}/retry` 恢复。任务 `job_84545a9905574f0a86977e67dee2d97d` 最终 succeeded；当前版本为 `portal_f7d10e549afd3c6cede45d04`，8个标准版本均 active，753条 machine_checked、755个映射分块，远端同步清单 verified。原批次 publish_intent=succeeded；API、只读SQLite和批次记录一致。
