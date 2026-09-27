@@ -2,6 +2,12 @@
 
 ## 真实自动入库检索恢复（2026-09-27）
 
+- 最终真实恢复完成：使用 `.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch auto --input-dir 'C:\.me\dev\Desktop\documents' --manifest data/batch/desktop-documents-20260927/manifest.json --recursive` 跟踪原任务，经既有 `POST /api/jobs/{id}/retry` 恢复。任务 `job_84545a9905574f0a86977e67dee2d97d` 最终 succeeded；当前版本为 `portal_f7d10e549afd3c6cede45d04`，8个标准版本均 active，753条 machine_checked、755个映射分块，远端同步清单 verified。原批次 publish_intent=succeeded；API、只读SQLite和批次记录一致。
+- 2026-09-27 10:01:20 UTC 的真实100条自动回查：passed=true、hit_at_5_rate=1.0、all_targets_recalled_rate=1.0、error_count=0、provenance=live_service_api。过程中4次超时经有限重试恢复，逐次记录保留；首次11项技术失败的完整评测已按哈希归档。没有修改题目、预期或阈值。8份分区文档和已有索引复用，没有重复上传。
+- 结果保存在被Git忽略的 `data/batch/desktop-documents-20260927/import-summary.json`、`manifest.json`、`automated-preview.json` 及 `data/portal/manifests/retrieval_*.json`。最终各标准纳入数：GB15760-2004=112、GB15760-2025=162、GB16454-2008=88、GB18209.2-2010=18、GB28241-2012=181、GB/T16754-2021=40、GB/T42596.3-2023=50、GB/T8196-2018=102。209条有边界、图表、来源上下文或依赖疑点的候选保持排除。
+- 限制：753条全部为未经人工复核的机器记录，复核人为空，evidence_complete=false；原文回查100%仅验证索引、过滤和映射，不证明业务问题准确率、标准现行状态或适用性。本轮未运行设备图片评估或形成新报告；历史记录不改写。业务PDF、解析产物、数据库、密钥及评测正文均未提交Git。
+- 发布后本机8002 `/health` 实际HTTP200：status=ok、database=true、snapshot_available=true、authentication_configured=true；门户任务列表queued/running=0。门户、证据服务和worker保留运行；这不是公网HTTPS回调或设备评估模型的完整联调结论。
+
 - 桌面8份PDF全部解析完成，共218页、962候选；自动预览纳入753条、排除209条。原专用Dify知识库内8份分区文档、755个分块均完成真实索引与映射回读，未切换知识库。
 - 首次100条自动原文回查通过live_service_api执行：89次正常响应均命中，10次请求超时、1次嵌入插件RemoteDisconnected。结果passed=false，hit_at_5_rate=null；发布任务因retrieval_gate_failed失败，快照仍candidate，没有绕过门禁或伪造成功。
 - 针对此真实临时故障，自动模式的只读检索最多重试2次，保留每次错误；401、普通400及映射错误不重试，长Retry-After保留失败。人工模式默认0重试不变。任务记录completed/total；旧完整评测按内容哈希归档后才写新结果，题目、预期条款、90%门槛和零技术错误要求不变。恢复仍使用原任务及已有索引，重新执行整组100题。
