@@ -165,3 +165,34 @@ def test_machine_record_cannot_claim_review_or_drop_hard_blocks(parsed, field, v
     record = automated.preview(store, repo, [doc["id"]], config.data_root, supplied)["records"][0]
     record[field] = value
     with pytest.raises(DomainError): automated.validate_machine_record(record)
+
+
+def test_exact_blank_page_requires_no_paint_no_annotations_and_no_parsed_blocks(parsed):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+    config, _, doc, _, _ = setup(parsed)
+    doc = deepcopy(doc)
+    doc["payload"]["normalized"]["pages"][0]["blocks"] = []
+    checks = [{"code": "empty_pages", "pages": [1]}]
+    assert automated.verified_blank_pages(doc, config.data_root, checks) == [1]
+    assert automated.verified_blank_pages(doc, config.data_root, checks + [{"code": "missing_pages"}]) == []
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=100, height=100)
+    content = DecodedStreamObject()
+    content.set_data(b"0 0 10 10 re f")
+    page[NameObject("/Contents")] = writer._add_object(content)
+    with (config.data_root / doc["source_path"]).open("wb") as stream:
+        writer.write(stream)
+    assert automated.verified_blank_pages(doc, config.data_root, checks) == []
+
+
+def test_bad_dependent_is_excluded_without_dropping_its_dependency_edge(parsed):
+    config, store, doc, supplied, repo = setup(parsed)
+    payload = deepcopy(doc["payload"])
+    payload["candidates"][1]["record"]["context_clause_uids"] = ["missing_clause"]
+    store.save_document(doc["id"], doc["revision"], payload, "parsed", "test", "synthetic")
+    value = automated.preview(store, repo, [doc["id"]], config.data_root, supplied)
+    assert [r["clause_no"] for r in value["records"]] == ["1"]
+    assert value["excluded"][0]["reasons"] == ["dependency_not_publishable"]
+    assert not value["blockers"]
+    assert store.document(doc["id"])["payload"]["candidates"][1]["record"]["context_clause_uids"] == ["missing_clause"]

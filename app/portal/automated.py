@@ -1,16 +1,41 @@
 """显式自动模式：规则检查不是人工批准，不修改原文档或复核记录。"""
 from copy import deepcopy
 
+from pypdf import PdfReader
+
 from app.errors import DomainError
 from app.repository import digest, sha256
 from app.schemas import ClauseRecord
 from app.portal import assistance, review
+from ingestion.mineru_adapter import local_path
 
 VERSION = "automated-rules-v1"
 NOTICE = "未经人工复核；机器检查不确认原文正确性、标准现行状态或业务适用性。"
 IDENTITY = {"standard_code", "standard_name", "edition", "scope"}
 PENDING_FLAGS = {"text_review_required", "standard_metadata_required", "boundary_review_required",
                  "context_review_required", "human_review_required"}
+
+
+def verified_blank_pages(doc, root, checks):
+    """只接受无文字、路径、图像、批注绘制指令的空页；不以OCR为空作证明。"""
+    requested = {p for c in checks if c["code"] == "empty_pages" for p in c["pages"]}
+    if not requested or any(c["code"] in {"source_archive_changed", "missing_pages"} for c in checks):
+        return []
+    normalized = {p["pdf_page_index"] + 1: p for p in doc["payload"]["normalized"]["pages"]}
+    safe = {b"q", b"Q", b"cm", b"g", b"G", b"rg", b"RG", b"k", b"K"}
+    verified = []
+    try:
+        reader = PdfReader(local_path(root, doc["source_path"]))
+        for number in sorted(requested):
+            if number not in normalized or normalized[number]["blocks"] or not 1 <= number <= len(reader.pages):
+                continue
+            page = reader.pages[number - 1]
+            content = page.get_contents()
+            if not page.get("/Annots") and (content is None or all(op in safe for _, op in content.operations)):
+                verified.append(number)
+    except Exception:
+        return []  # 无法可靠读取则保留原阻塞，不能因解析失败放行。
+    return verified
 
 
 def validate_machine_record(record):
@@ -28,7 +53,7 @@ def preview(store, evidence, document_ids, root, metadata=None):
     metadata = metadata or {}
     if set(metadata) - set(document_ids):
         raise DomainError("input_error", "metadata 只能包含本次 document_ids")
-    records, excluded, provenance = [], [], {}
+    records, excluded, provenance, locations = [], [], {}, {}
     for uid in sorted(set(document_ids)):
         doc = deepcopy(store.document(uid))
         payload = doc["payload"]
@@ -52,10 +77,14 @@ def preview(store, evidence, document_ids, root, metadata=None):
             elif any(r[k] != v for k, v in supplied.items()):
                 raise DomainError("review_required", "自动模式不能改写已有人工批准条款的元数据")
         analysis = assistance.analyze(doc, root)
+        blanks = verified_blank_pages(doc, root, analysis["document_checks"])
+        provenance[uid]["machine_verified_blank_pages"] = blanks
+        checks = [c for c in analysis["document_checks"]
+                  if c["code"] != "empty_pages" or not set(c["pages"]) <= set(blanks)]
         rows = {r["candidate_id"]: r for r in analysis["rows"]}
         for item in payload["candidates"]:
             r, row = item["record"], rows[item["id"]]
-            reasons = [v["code"] for v in analysis["document_checks"] + row["issues"]]
+            reasons = [v["code"] for v in checks + row["issues"]]
             if r["boundary_status"] == "unknown": reasons.append("unknown_boundary")
             if r["content_review_status"] == "rejected": reasons.append("rejected")
             if r["content_review_status"] != "approved":
@@ -72,9 +101,24 @@ def preview(store, evidence, document_ids, root, metadata=None):
                          review_notes=VERSION + ": " + NOTICE + " " + r.get("review_notes", ""))
                 validate_machine_record(r)
             records.append(ClauseRecord.model_validate(r).model_dump())
+            locations[r["clause_uid"]] = {"document_id": uid, "candidate_id": item["id"]}
     if not records:
         raise DomainError("machine_check_required", "无可自动发布条款，未绕过疑点", details={"excluded": excluded})
     value = review.release_preview(store, evidence, document_ids, machine_records=records)
+    # 排除依赖不完整的机器条款及其传递依赖者，不能删除依赖边后冒充完整。
+    # 不自动改动继承的历史条款或人工批准记录；这些问题仍由原发布门禁阻止。
+    while True:
+        machine_ids = {r["clause_uid"] for r in records if r["content_review_status"] == "machine_checked"}
+        affected = {b["clause_uid"] for b in value["blockers"]
+                    if b["code"] in {"missing_context", "context_cycle"} and b.get("clause_uid") in machine_ids}
+        if not affected:
+            break
+        for cid in sorted(affected):
+            excluded.append({**locations[cid], "clause_uid": cid, "reasons": ["dependency_not_publishable"]})
+        records = [r for r in records if r["clause_uid"] not in affected]
+        if not records:
+            raise DomainError("machine_check_required", "没有依赖完整的可发布条款", details={"excluded": excluded})
+        value = review.release_preview(store, evidence, document_ids, machine_records=records)
     value.pop("preview_hash")
     value.update(mode="automated", machine_check_version=VERSION, metadata_provenance=provenance,
                  excluded=excluded, notice=NOTICE)
