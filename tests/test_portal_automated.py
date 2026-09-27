@@ -196,3 +196,12 @@ def test_bad_dependent_is_excluded_without_dropping_its_dependency_edge(parsed):
     assert value["excluded"][0]["reasons"] == ["dependency_not_publishable"]
     assert not value["blockers"]
     assert store.document(doc["id"])["payload"]["candidates"][1]["record"]["context_clause_uids"] == ["missing_clause"]
+
+
+def test_list_labels_are_not_missing_parentheses_but_broken_prose_still_is():
+    from app.portal.assistance import unbalanced_parentheses
+    assert not unbalanced_parentheses("本标准（合成）不适用：\na) 项目一；\nb) 项目二。")
+    assert unbalanced_parentheses("本标准（合成不适用：\na) 项目一；\nb) 项目二。")
+    assert unbalanced_parentheses("正文缺失了起始括号）。")
+    assert unbalanced_parentheses("a) 孤立编号仍需检查。")
+    assert unbalanced_parentheses("a) 项目一；\nc) 跳号仍需检查。")

@@ -15,6 +15,15 @@ UNITS = r"mm|cm|km|m|kg|mg|g|kN|N|MPa|kPa|Pa|kW|W|V|A|Hz|s|℃|°C|%|°"
 NUMBERS = re.compile(rf"(?<![\w.])\d+(?:[.,．]\s*\d+)?\s*(?:{UNITS})(?![A-Za-z])", re.I)
 
 
+def unbalanced_parentheses(text):
+    # 标准常用 a) … b) … 列项；连续从a开始的行首标签不是正文右括号。
+    pattern = r"(?m)^\s*([a-z])[)）]\s+"
+    labels = re.findall(pattern, text)
+    if len(labels) >= 2 and labels == [chr(ord("a") + i) for i in range(len(labels))]:
+        text = re.sub(pattern, "", text)
+    return len(re.findall(r"[（(]", text)) != len(re.findall(r"[）)]", text))
+
+
 def blocks(payload):
     return {b["block_id"]: (page, b) for page in payload.get("normalized", {}).get("pages", []) for b in page["blocks"]}
 
@@ -235,7 +244,7 @@ def analyze(doc, data_root, documents=(), historical=None, baseline_id=""):
                 issue("figure_reference", "引用图表未在已识别图表/标题中定位，需核对是否为外部引用", reference=ref)
         suspected = re.findall(rf"\d[OoＯIlｌ]\s*(?:{UNITS})|\d[.．,]\s+\d|\d\s*[~～至]\s*(?:{UNITS})(?!\w)|�", text, re.I)
         if suspected: issue("numeric_ocr", "数字、单位或字符存在疑点，不自动改写", samples=list(dict.fromkeys(suspected))[:15])
-        if len(re.findall(r"[（(]", text)) != len(re.findall(r"[）)]", text)):
+        if unbalanced_parentheses(text):
             issue("sentence_fragment", "括号不配对，核对是否缺句、跨页或OCR遗漏")
         for target in re.findall(r"(?:见|参见|按照|根据)\s*(\d+(?:\.\d+)+|[A-Z](?:\.\d+)+)", text):
             if target in by_no: suggest(target, "正文出现条款引用，需确认是否为本标准及必要上下文")
