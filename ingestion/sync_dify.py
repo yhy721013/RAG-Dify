@@ -54,10 +54,14 @@ def split_text(text, limit=500):
         text = text[end:]
 
 
-def chunks_for(clauses):
+def chunks_for(clauses, *, allow_machine=False):
     chunks = {}
     for clause in sorted(clauses, key=lambda item: item["clause_path"]):
-        if clause["content_review_status"] != "approved" or not clause["evidence_complete"] or sha256(clause["text_verbatim"]) != clause["content_sha256"]:
+        machine = allow_machine and clause["content_review_status"] == "machine_checked"
+        if machine:
+            from app.portal.automated import validate_machine_record
+            validate_machine_record(clause)
+        if (not machine and (clause["content_review_status"] != "approved" or not clause["evidence_complete"])) or sha256(clause["text_verbatim"]) != clause["content_sha256"]:
             raise DomainError("review_required", "同步只允许未篡改的批准条款")
         text = re.sub(r"!\[[^\]]*\]\([^)]*\)|<img\b[^>]*>", "", clause["text_verbatim"], flags=re.IGNORECASE)
         if not text.strip():
@@ -138,7 +142,7 @@ def sync_snapshot(snapshot_id, repo, settings, client):
             groups[clause["standard_uid"]].append(clause)
         all_mappings = []
         for standard_uid, group in sorted(groups.items()):
-            chunks = chunks_for(group)
+            chunks = chunks_for(group, allow_machine=settings.partitioned_dataset)
             text = ("\n" + BOUNDARY + "\n").join(item["content"] for item in chunks.values())
             content_hash = sha256(text)
             name = f"{snapshot_id}_{standard_uid}_{content_hash[:16]}"
@@ -211,7 +215,7 @@ def verify_historical_partitions(snapshot_id, repo, settings, client, field):
         clauses = [repo.clause(historical_id, uid) for uid in sorted({row["clause_uid"] for row in mappings})]
         if any(row is None for row in clauses):
             raise DomainError("mapping_error", "历史分区缺少已登记条款")
-        actual = verify_segments(client.segments(document_id), chunks_for(clauses), historical_id, settings.dataset_id, document_id)
+        actual = verify_segments(client.segments(document_id), chunks_for(clauses, allow_machine=settings.partitioned_dataset), historical_id, settings.dataset_id, document_id)
         if sorted(actual, key=lambda row: row["chunk_uid"]) != sorted(mappings, key=lambda row: row["chunk_uid"]):
             raise DomainError("mapping_error", "历史分区的条款映射发生漂移", status=409)
     return {document_id for _, document_id in groups}
@@ -223,6 +227,9 @@ def activate_snapshot(snapshot_id, repo, settings, client):
     if not path.is_file():
         raise DomainError("activation_blocked", "缺少本快照的检索评测记录", status=409)
     evaluation = json.loads(path.read_text(encoding="utf-8"))
+    if any(r["content_review_status"] == "machine_checked" for r in repo.all_clauses(snapshot_id)):
+        if not settings.partitioned_dataset or evaluation.get("evaluation_kind") != "automated_smoke":
+            raise DomainError("activation_blocked", "机器条款只能由门户自动模式及自动检索检查发布", status=409)
     if not evaluation.get("passed") or (settings.app_env != "test" and evaluation.get("provenance") != "live_service_api"):
         raise DomainError("activation_blocked", "真实检索评测未通过；模拟结果不得用于业务发布", status=409)
     if settings.partitioned_dataset and evaluation.get("snapshot_filter") != client.snapshot_filter(snapshot_id):

@@ -189,7 +189,8 @@
       "enum": [
         "pending",
         "approved",
-        "rejected"
+        "rejected",
+        "machine_checked"
       ],
       "title": "Content Review Status",
       "type": "string"
@@ -209,7 +210,8 @@
       "enum": [
         "pending",
         "confirmed",
-        "unknown"
+        "unknown",
+        "machine_checked"
       ],
       "title": "Boundary Status",
       "type": "string"

@@ -4,6 +4,7 @@ import sqlite3
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
@@ -44,6 +45,8 @@ class ReviewAction(StrictModel):
 
 
 class ReleaseAction(StrictModel):
+    mode: Literal["manual", "automated"] = "manual"
+    metadata: dict[str, dict[str, str]] = Field(default_factory=dict)
     document_ids: list[str] = Field(min_length=1, max_length=100)
     preview_hash: str = ""
     confirm_replacements: bool = False
@@ -358,6 +361,9 @@ def create_app(config=None, project_root=ROOT):
 
     @app.post("/api/releases/preview")
     def preview(body: ReleaseAction):
+        if body.mode == "automated":
+            from app.portal.automated import preview as machine_preview
+            return machine_preview(store, evidence, body.document_ids, settings.data_root, body.metadata)
         value = review.release_preview(store, evidence, body.document_ids)
         return {**value, "case_draft": assistance.retrieval_drafts(value)}
 
@@ -365,7 +371,11 @@ def create_app(config=None, project_root=ROOT):
     def release(body: ReleaseAction):
         settings.evidence_settings().require_dify()
         require_diagnostic_gate("publish")
-        candidate = review.release_preview(store, evidence, body.document_ids)
+        if body.mode == "automated":
+            from app.portal.automated import preview as machine_preview
+            candidate = machine_preview(store, evidence, body.document_ids, settings.data_root, body.metadata)
+        else:
+            candidate = review.release_preview(store, evidence, body.document_ids)
         if candidate.get("blockers"):
             raise DomainError("review_required", "请先修复发布预检中的问题", details={"blockers": candidate["blockers"]})
         if candidate["preview_hash"] != body.preview_hash:
@@ -374,6 +384,14 @@ def create_app(config=None, project_root=ROOT):
             raise DomainError("unchanged_snapshot", "已批准内容与当前版本完全一致，无需重复建立索引", status=409)
         if candidate["replacements"] and not body.confirm_replacements:
             raise DomainError("replacement_confirmation", "本次将替换同标准版本的条款集合，请确认预览", status=409)
+        if body.mode == "automated":
+            from app.portal.automated import smoke_cases
+            if body.cases or body.actor or body.case_draft_id or body.confirmed_case_ids:
+                raise DomainError("input_error", "自动模式使用机器回查，不接收人工复核人或人工问题标注")
+            snapshot_id = "portal_" + digest(["automated", body.preview_hash])[:24]
+            candidate.update(snapshot_id=snapshot_id, cases=smoke_cases(candidate, snapshot_id),
+                             case_review={"source": "automated_smoke", "human_reviewed": False})
+            return public_job(store.enqueue("publish", candidate, "publish:" + snapshot_id))
         if not body.actor.strip() or not body.cases:
             raise DomainError("review_required", "请填写人工标注的检索问题、目标条款与复核人")
         if not body.case_draft_id and any(str(row.get("case_id", "")).startswith("draft_") for row in body.cases):

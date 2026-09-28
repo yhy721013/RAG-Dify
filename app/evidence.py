@@ -20,7 +20,11 @@ def prepare(request: PrepareRequest, repo, settings, owner):
     def verified(clause):
         if clause["is_test_fixture"] and settings.app_env != "test":
             raise DomainError("test_fixture_forbidden", "真实评估禁止使用测试条款", "snapshot_id", 409)
-        if clause["content_review_status"] != "approved" or sha256(clause["text_verbatim"]) != clause["content_sha256"]:
+        machine = clause["content_review_status"] == "machine_checked" and settings.published_snapshots
+        if machine:
+            from app.portal.automated import validate_machine_record
+            validate_machine_record(clause)
+        if (clause["content_review_status"] != "approved" and not machine) or sha256(clause["text_verbatim"]) != clause["content_sha256"]:
             raise DomainError("mapping_error", "条款未复核或原文哈希异常", "hits", 502)
 
     def bundle(clause):
@@ -44,6 +48,8 @@ def prepare(request: PrepareRequest, repo, settings, owner):
                 visit(context, ancestors | {uid})
 
         visit(clause, {clause["clause_uid"]})
+        if any(item["content_review_status"] == "machine_checked" for item in [clause, *dependencies]):
+            issues.append("human_review_required: 未经人工复核，标准状态与适用范围尚未人工核验")
         complete = not issues and all(item["evidence_complete"] for item in [clause, *dependencies])
         return {**clause, "evidence_id": "ev_" + uuid4().hex, "context_clauses": dependencies,
                 "evidence_complete": complete, "completeness_issues": issues,
@@ -51,6 +57,8 @@ def prepare(request: PrepareRequest, repo, settings, owner):
 
     payload = {"context_id": "ctx_" + uuid4().hex, "request": request_data,
                "snapshot_id": request.snapshot_id, "checks": [], "evidence": []}
+    if any(r["content_review_status"] == "machine_checked" for r in repo.all_clauses(request.snapshot_id)):
+        payload["knowledge_review_status"] = "human_review_required"
     by_clause, used_chars = {}, 0
     for check in request.checks:
         allowed, excluded, seen = [], [], set()

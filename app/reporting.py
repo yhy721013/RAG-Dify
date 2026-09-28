@@ -25,6 +25,8 @@ def finalize(draft, repo, owner):
               "validation_passed": True, "review_status": "pending_review", "validation": validation,
               "findings": [{**item.model_dump(), "citations": [evidence[uid] for uid in item.evidence_ids]}
                            for item in draft.findings]}
+    if context.get("knowledge_review_status"):
+        report["knowledge_review_status"] = context["knowledge_review_status"]
     env = Environment(loader=FileSystemLoader(ROOT / "templates"), undefined=StrictUndefined,
                       autoescape=False, keep_trailing_newline=True)
     env.filters["safe_text"] = safe_text

@@ -1,5 +1,54 @@
 # 分阶段验收记录
 
+## 自动入库 PR 提交前验证（2026-09-27）
+
+- 对最终合并范围执行 `.\.venv\Scripts\python.exe -X utf8 -m pytest -q`：**255 passed, 2 warnings in 24.06s**，两条为既有第三方弃用警告；`git diff --check origin/main...HEAD` 通过。
+- 核对原6个待推送提交的变更文件：未包含业务PDF、数据库、解析包或运行配置；与当前运行密钥比对无命中。真实联调结果与限制见下节，离线测试不替代业务准确性验收。使用独立分支 `codex/automated-portal-ingestion` 提交PR，不直接更新远端main。
+
+## 真实自动入库检索恢复（2026-09-27）
+
+- 最终真实恢复完成：使用 `.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch auto --input-dir 'C:\.me\dev\Desktop\documents' --manifest data/batch/desktop-documents-20260927/manifest.json --recursive` 跟踪原任务，经既有 `POST /api/jobs/{id}/retry` 恢复。任务 `job_84545a9905574f0a86977e67dee2d97d` 最终 succeeded；当前版本为 `portal_f7d10e549afd3c6cede45d04`，8个标准版本均 active，753条 machine_checked、755个映射分块，远端同步清单 verified。原批次 publish_intent=succeeded；API、只读SQLite和批次记录一致。
+- 2026-09-27 10:01:20 UTC 的真实100条自动回查：passed=true、hit_at_5_rate=1.0、all_targets_recalled_rate=1.0、error_count=0、provenance=live_service_api。过程中4次超时经有限重试恢复，逐次记录保留；首次11项技术失败的完整评测已按哈希归档。没有修改题目、预期或阈值。8份分区文档和已有索引复用，没有重复上传。
+- 结果保存在被Git忽略的 `data/batch/desktop-documents-20260927/import-summary.json`、`manifest.json`、`automated-preview.json` 及 `data/portal/manifests/retrieval_*.json`。最终各标准纳入数：GB15760-2004=112、GB15760-2025=162、GB16454-2008=88、GB18209.2-2010=18、GB28241-2012=181、GB/T16754-2021=40、GB/T42596.3-2023=50、GB/T8196-2018=102。209条有边界、图表、来源上下文或依赖疑点的候选保持排除。
+- 限制：753条全部为未经人工复核的机器记录，复核人为空，evidence_complete=false；原文回查100%仅验证索引、过滤和映射，不证明业务问题准确率、标准现行状态或适用性。本轮未运行设备图片评估或形成新报告；历史记录不改写。业务PDF、解析产物、数据库、密钥及评测正文均未提交Git。
+- 发布后本机8002 `/health` 实际HTTP200：status=ok、database=true、snapshot_available=true、authentication_configured=true；门户任务列表queued/running=0。门户、证据服务和worker保留运行；这不是公网HTTPS回调或设备评估模型的完整联调结论。
+
+- 桌面8份PDF全部解析完成，共218页、962候选；自动预览纳入753条、排除209条。原专用Dify知识库内8份分区文档、755个分块均完成真实索引与映射回读，未切换知识库。
+- 首次100条自动原文回查通过live_service_api执行：89次正常响应均命中，10次请求超时、1次嵌入插件RemoteDisconnected。结果passed=false，hit_at_5_rate=null；发布任务因retrieval_gate_failed失败，快照仍candidate，没有绕过门禁或伪造成功。
+- 针对此真实临时故障，自动模式的只读检索最多重试2次，保留每次错误；401、普通400及映射错误不重试，长Retry-After保留失败。人工模式默认0重试不变。任务记录completed/total；旧完整评测按内容哈希归档后才写新结果，题目、预期条款、90%门槛和零技术错误要求不变。恢复仍使用原任务及已有索引，重新执行整组100题。
+- `.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_retrieval_retry.py tests/test_portal_automated.py tests/test_snapshot_partitions.py tests/test_dify_live_contracts.py`：**30 passed, 2 warnings in 6.90s**；覆盖超时后成功保留审计、重试上限、不可重试错误、插件断连及长限流等待。两条为既有弃用警告。此节尚不代表真实恢复发布成功，结果在后续补记。
+- 补充 `tests/test_portal_automated.py::test_failed_evaluation_archive_and_same_job_recovery`：**1 passed, 2 warnings in 2.42s**，实际模拟持续503阻止发布、检查进度、故障解除后同任务成功、远端文档不重复及旧失败评测完整归档。共31项相关测试通过。
+
+## 真实批量入库准备及空页/依赖筛选修复（2026-09-27）
+
+- 随后真实范围条款的连续 `a) … b) …` 列项被旧括号计数误报为 sentence_fragment，导致所有依赖范围的条款被排除。现在只在行首标签从a连续排列且至少两项时，将标签从括号计数中扣除；原文不改写，真正未配对的正文括号、孤立标签和跳号仍报告疑点。`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_automated.py tests/test_portal_assistance.py` → **44 passed, 2 warnings in 16.66s**。修复后该标准预检181条可发布、22条排除、无依赖阻塞，此时尚未执行远端发布。为避免新旧规则混用，只停止本次尚无发布意图的 CLI 等待进程，后台解析继续，完成后按原清单恢复。
+
+- 用户授权执行桌面 documents 的8份 PDF 自动入库。调用原 start-portal.ps1 遇到重启后 process_state_exists；使用原 stop-portal.ps1 核对并清理失效登记后重新启动成功，未强制中断运行中任务。批次清单位于被 Git 忽略的 data/batch/desktop-documents-20260927，业务 PDF、解析包、数据库、正文元数据和预检结果均不提交。
+- 真实首份 PDF 有3页仅含非绘制内容流，原规则将其作为 empty_pages 警告阻断整份资料。新增严格空白页判定：源文件检查正常、对应解析页无块、原页无批注，且内容流仅允许 q/Q/cm 及颜色状态指令；任何文本、路径绘制、图像、表单、异常或未知操作保持阻止。机器确认页码记入预览元数据来源，不改原审核记录。原页渲染也已确认这3页全白。
+- 依赖过滤改为迭代排除依赖缺失/成环的本次机器条款及其传递依赖者；不删除依赖边、不自动纳入有疑点的依赖，不修改历史或人工批准记录。这些记录的阻塞与重复身份仍保留为发布门禁。相关自动子集行为已更新 batch-runbook。
+- 测试仅使用本目录 .venv：`python -X utf8 -m pytest -q tests/test_portal_automated.py` → 17 passed；`python -X utf8 -m pytest -q` → **245 passed, 2 warnings in 34.88s**。新增合成测试验证严格空白页/实际绘制/来源异常及依赖筛选后不改原记录。两条弃用警告与此前一致。此处仅记录修复与解析准备，不把模拟测试写成真实 Dify 发布完成。
+
+## 显式自动入库模式阶段交付（2026-09-26）
+
+- 用户在前次审批阻塞后明确授权修改 AGENTS.md：人工模式保留；自动模式允许机器检查通过但未经人工复核的条款入库，不伪造批准。AGENTS.md 和 portal-plan.md 已同步。下方“自动模式未完成”是本次之前的历史记录，已由本节覆盖。
+- 新增 `app/portal/automated.py`：仅处理副本，规则预填身份/范围、补充父条款/范围/正文引用依赖；来源、页覆盖、未知边界、资产、规则疑点不放行。排除集合及原因入预览/任务；依赖不完整、循环、重复身份阻止发布。元数据不明时通过命令行 JSON 补充，不猜测现行状态。机器条款持久化为 machine_checked，evidence_complete=false，无人工复核人和日期，原候选与人工历史保持不变。
+- 原发布 API 新增默认兼容的 mode/metadata 字段；明确选择 automated 才启用机器集合和自动原文回查。手工模式保持人工问题签核要求。worker 排队后检查文档 revision，导入再次验证 PDF/资产哈希、页数、依赖和不可变快照；Dify 仍使用同一专用库和 rag_snapshot_id 分区，不切换知识库、不删除历史分区。自动原文回查独立标记 automated_smoke / human_annotated=false，不能冒充业务评测。
+- 新增批处理 auto 子命令：目录上传、哈希去重、解析等待、预览落盘、发布、任务汇总。已提交清单重复执行只查询原任务；不同批次用不同清单，同库累积新版本。同标准集合替换要求 --confirm-replacements；未变化集合不建新索引。保留发布意图及未知结果禁止重发规则。CSRF/Origin/Cookie 与本机限制不变。
+- 证据服务接纳门户已发布机器条款但保持不完整，模型收到 completeness_issues；JSON/Markdown 报告标明未经人工复核。现有 evidence_supported_risk 完整性门禁不放宽。Workflow 节点与七输入契约未改变，无新增前端页面，无数据库列迁移，旧报告不重写。
+- 实测：`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_automated.py tests/test_portal_batch.py` → **20 passed**；`.\.venv\Scripts\python.exe -X utf8 -m pytest -q` → **243 passed, 2 warnings in 36.24s**；`.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch auto --help` 正常；`git diff --check` 通过。两个警告为既有 Starlette/httpx 与 AnyIO 弃用提示。
+- 新增16项离线测试覆盖：机器状态/不改原审核、默认人工导入拒绝机器记录、重复导入不可变、缺页/损坏来源/资产/未知边界/已拒绝/拆分/疑似空页阻断、必要依赖缺失、API重复提交/旧预览/替换确认/伪复核人拒绝、排队后修改拒绝、模拟Dify两批同库累计与旧版不变、机器证据/报告标记、风险判定门禁、自动CLI重复执行与未知结果不重发。
+- 限制：测试全部使用合成 PDF、临时 SQLite 和 MockTransport，不代表真实 MinerU/Dify/模型业务联调；未操作运行中业务库、配置、密钥或真实任务。规则保守，复杂图表/跨页/未识别边界可能需要人工处理；自动回查最多100题、累计最多100个标准，仅测原文片段回查，不测业务准确率。累计版本会重复占用 Dify 索引资源，未新增历史清理。更新后须在任务空闲时重启门户、证据服务和 worker。操作说明与元数据补充格式见 docs/batch-runbook.md。
+
+## 批处理入口阶段交付（2026-09-26，自动模式未完成）
+
+- 用户授权新增脚本入口及免逐条人工审核的自动入库模式。修改 ClauseRecord 新增 machine_checked/automated 状态时被自动审批检查拒绝，理由为与 AGENTS.md 的“条款只能在人工复核后导入”冲突；该补丁未落盘。没有绕过审批或伪造批准记录，自动后端模式仍阻塞。
+- 已完成不受阻塞部分：`app/portal/batch.py` 提供 ingest/preview/publish/status，通过原门户 API 自动建立本机会话、携带 Origin/Cookie/CSRF；按哈希去重并持久化批次清单，上传后等待原解析任务，失败文件不阻止后续文件，导出复核数据。publish 仍要求现有人工批准集合与人工核对的 cases，不具备免审核能力。
+- 发布前落盘请求意图；响应丢失保留未知结果并拒绝自动重发。上传响应丢失可由原服务端哈希去重恢复。客户端不管理 worker、不改 SQLite、不调用批准接口。前端、DSL、证据契约、历史报告保持原样。
+- 实测命令：`.\.venv\Scripts\python.exe -X utf8 -m pytest -q tests/test_portal_batch.py` → 4 passed；`.\.venv\Scripts\python.exe -X utf8 -m pytest -q` → **227 passed, 2 warnings in 14.87s**；`.\.venv\Scripts\python.exe -X utf8 -m app.portal.batch --help` 正常。两个警告为既有 Starlette/httpx 与 AnyIO 弃用提示。`git diff --check` 通过。
+- 新测试使用 MockTransport 和合成数据，覆盖本机会话、远程地址拒绝、重复上传/断点继续、失败解析隔离、未知发布结果禁止重发；没有执行真实 PDF 解析、Dify 入库或产生模型费用，不声称真实业务验收。
+- 使用方法见 `docs/batch-runbook.md`。清单和导出的复核正文应放 data/batch，不能进 Git。同一清单只允许一个客户端运行；服务重启后需重新执行命令取新会话；发布拒绝也保守保留意图，需对账后处理。
+- 剩余工作：自动状态与来源记录、机器检查规则、自动模式发布/证据/报告兼容、自动检索冒烟、对应测试及真实联调。需先解决免人工审核模式的审批阻塞。本轮未改动运行服务和已有业务数据。
+
 目标范围：阶段 A～D 已完成本轮限定范围内的技术验收，不进入阶段 E。当前根目录即指南中的 `mechanical-safety-rag/`。
 所有终端命令使用 PowerShell 7；测试使用 `D:\RAG-Dify\.venv`。
 
