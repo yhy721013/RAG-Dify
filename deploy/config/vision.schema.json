@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "VisionObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "image_ids": {
+          "description": "只复制本次图片清单的 image_id；不能填写文件UUID、文件名或字段名。",
+          "items": {
+            "pattern": "^image_00[1-4]$",
+            "type": "string",
+            "enum": [
+              "image_001",
+              "image_002",
+              "image_003",
+              "image_004"
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Image Ids",
+          "type": "array"
+        },
+        "part": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Part",
+          "type": "string"
+        },
+        "visible_fact": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Visible Fact",
+          "type": "string"
+        },
+        "unknowns": {
+          "items": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Unknowns",
+          "type": "array"
+        },
+        "check_ids": {
+          "description": "只选择固定清单中的 check_id；无关联时填写 []，禁止把 check_ids 字段名当作值。",
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string",
+            "enum": [
+              "guard_hazards",
+              "guard_joints",
+              "guard_access",
+              "guard_durability",
+              "fixed_guard",
+              "movable_guard"
+            ]
+          },
+          "maxItems": 6,
+          "title": "Check Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "image_ids",
+        "part",
+        "visible_fact",
+        "unknowns",
+        "check_ids"
+      ],
+      "title": "VisionObservation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "scope_status": {
+      "enum": [
+        "same_equipment",
+        "different_equipment",
+        "uncertain",
+        "unreadable"
+      ],
+      "title": "Scope Status",
+      "type": "string"
+    },
+    "scope_reason": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Scope Reason",
+      "type": "string"
+    },
+    "observations": {
+      "items": {
+        "$ref": "#/$defs/VisionObservation"
+      },
+      "maxItems": 18,
+      "title": "Observations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "scope_status",
+    "scope_reason",
+    "observations"
+  ],
+  "title": "VisionResult",
+  "type": "object"
+}

@@ -1,0 +1,255 @@
+{
+  "$defs": {
+    "SourceSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "pdf_page_index": {
+          "minimum": 0,
+          "title": "Pdf Page Index",
+          "type": "integer"
+        },
+        "printed_page_label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed Page Label"
+        },
+        "block_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Block Ids",
+          "type": "array"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        }
+      },
+      "required": [
+        "pdf_page_index",
+        "block_ids"
+      ],
+      "title": "SourceSpan",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "snapshot_id": {
+      "default": "",
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "standard_uid": {
+      "default": "",
+      "title": "Standard Uid",
+      "type": "string"
+    },
+    "standard_code": {
+      "default": "",
+      "title": "Standard Code",
+      "type": "string"
+    },
+    "standard_name": {
+      "default": "",
+      "title": "Standard Name",
+      "type": "string"
+    },
+    "edition": {
+      "default": "",
+      "title": "Edition",
+      "type": "string"
+    },
+    "scope": {
+      "default": "",
+      "title": "Scope",
+      "type": "string"
+    },
+    "standard_status": {
+      "default": "unknown",
+      "title": "Standard Status",
+      "type": "string"
+    },
+    "status_verified_at": {
+      "default": "",
+      "title": "Status Verified At",
+      "type": "string"
+    },
+    "status_source": {
+      "default": "",
+      "title": "Status Source",
+      "type": "string"
+    },
+    "source_file_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source File Sha256",
+      "type": "string"
+    },
+    "source_archive_path": {
+      "title": "Source Archive Path",
+      "type": "string"
+    },
+    "source_page_count": {
+      "minimum": 1,
+      "title": "Source Page Count",
+      "type": "integer"
+    },
+    "parser_version": {
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "full_document_covered": {
+      "title": "Full Document Covered",
+      "type": "boolean"
+    },
+    "clause_uid": {
+      "default": "",
+      "title": "Clause Uid",
+      "type": "string"
+    },
+    "clause_no": {
+      "title": "Clause No",
+      "type": "string"
+    },
+    "clause_path": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Clause Path",
+      "type": "array"
+    },
+    "text_verbatim": {
+      "maxLength": 100000,
+      "minLength": 1,
+      "title": "Text Verbatim",
+      "type": "string"
+    },
+    "content_sha256": {
+      "default": "",
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "source_spans": {
+      "items": {
+        "$ref": "#/$defs/SourceSpan"
+      },
+      "minItems": 1,
+      "title": "Source Spans",
+      "type": "array"
+    },
+    "asset_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Asset Refs",
+      "type": "array"
+    },
+    "asset_sha256": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Asset Sha256",
+      "type": "object"
+    },
+    "context_clause_uids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Context Clause Uids",
+      "type": "array"
+    },
+    "content_review_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "machine_checked"
+      ],
+      "title": "Content Review Status",
+      "type": "string"
+    },
+    "evidence_complete": {
+      "default": false,
+      "title": "Evidence Complete",
+      "type": "boolean"
+    },
+    "is_test_fixture": {
+      "default": false,
+      "title": "Is Test Fixture",
+      "type": "boolean"
+    },
+    "boundary_status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "confirmed",
+        "unknown",
+        "machine_checked"
+      ],
+      "title": "Boundary Status",
+      "type": "string"
+    },
+    "review_issues": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Issues",
+      "type": "array"
+    },
+    "reviewed_by": {
+      "default": "",
+      "title": "Reviewed By",
+      "type": "string"
+    },
+    "reviewed_at": {
+      "default": "",
+      "title": "Reviewed At",
+      "type": "string"
+    },
+    "review_notes": {
+      "default": "",
+      "title": "Review Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_file_sha256",
+    "source_archive_path",
+    "source_page_count",
+    "parser_version",
+    "full_document_covered",
+    "clause_no",
+    "clause_path",
+    "text_verbatim",
+    "source_spans"
+  ],
+  "title": "ClauseRecord",
+  "type": "object"
+}
