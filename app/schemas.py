@@ -47,6 +47,7 @@ class PrepareRequest(StrictModel):
     # 阶段 D 的输入与运行追溯字段；可选以兼容阶段 A～C 请求。
     equipment_type: str | None = Field(default=None, max_length=100)
     equipment_description: str | None = Field(default=None, max_length=4000)
+    user_question: Text | None = None
     operating_state: Literal["运行", "停机", "检修", "未知"] | None = None
     work_context: str | None = Field(default=None, max_length=4000)
     same_equipment_confirmed: bool | None = None
@@ -55,6 +56,8 @@ class PrepareRequest(StrictModel):
 
     @model_validator(mode="after")
     def references(self):
+        if (self.workflow_version or "").startswith("portal-v3-dynamic") and self.user_question is None:
+            raise ValueError("动态工作流必须包含用户问题")
         if self.same_equipment_confirmed is False:
             raise ValueError("未确认同一设备，禁止继续评估")
         def unique(values, label):

@@ -138,7 +138,8 @@ def test_portal_evidence_blocks_active_but_unpublished_snapshot(tmp_path):
     assert not repo.snapshot_active("unpublished")
 
 
-def test_assessment_submission_pins_version_and_duplicate_does_not_enqueue_twice(tmp_path):
+@pytest.mark.parametrize("unified", [False, True])
+def test_assessment_submission_pins_version_and_duplicate_does_not_enqueue_twice(tmp_path, unified):
     from PIL import Image
     from conftest import seed
     from app.repository import Repository
@@ -152,10 +153,28 @@ def test_assessment_submission_pins_version_and_duplicate_does_not_enqueue_twice
         app.state.store.publish("publish1", "demo_snapshot", 4, 1, "")
         image = io.BytesIO()
         Image.new("RGB", (24, 24), "white").save(image, format="PNG")
-        data = {"work_context": "合成测试", "same_equipment_confirmed": "true", "submission_id": "submission_1"}
+        data = {"equipment_type": "剪板机", "user_question": "按钮周围结构有何需要核查？", "work_context": "合成测试", "same_equipment_confirmed": "true", "submission_id": "submission_1"}
+        if unified:
+            data = {"user_message": "这是剪板机的急停按钮，保护圈是否妨碍操作？请给出标准依据。",
+                    "work_context": "", "same_equipment_confirmed": "true", "submission_id": "submission_1"}
         files = {"images": ("synthetic.png", image.getvalue(), "image/png")}
+        if unified:
+            for invalid in ("   ", "字" * 4001):
+                rejected = client.post("/api/assessments", data={**data, "user_message": invalid}, files=files)
+                assert rejected.status_code >= 400
+            rejected = client.post("/api/assessments", data={**data, "same_equipment_confirmed": "false"}, files=files)
+            assert rejected.status_code >= 400
+            assert app.state.store.jobs() == []
         first = client.post("/api/assessments", data=data, files=files)
         assert first.status_code == 200
+        inputs = app.state.store.job(first.json()["id"])["payload"]["inputs"]
+        if unified:
+            assert inputs["equipment_type"] == "未单独指定，请结合用户描述与图片分析"
+            assert inputs["user_question"] == inputs["equipment_description"] == data["user_message"]
+            assert inputs["work_context"] == inputs["operating_state"] == "未知"
+            assert set(inputs) == {"equipment_type", "equipment_description", "user_question", "work_context", "operating_state", "same_equipment_confirmed"}
+        else:
+            assert inputs["equipment_type"] == "剪板机" and inputs["user_question"] == data["user_question"]
         second = client.post("/api/assessments", data=data, files=files)
         assert second.json()["id"] == first.json()["id"]
         app.state.store.publish("publish2", "new_version", 6, 1, "demo_snapshot")

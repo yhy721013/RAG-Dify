@@ -244,6 +244,21 @@
       "default": null,
       "title": "Equipment Description"
     },
+    "user_question": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Question"
+    },
     "operating_state": {
       "anyOf": [
         {

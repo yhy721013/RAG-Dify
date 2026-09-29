@@ -798,6 +798,10 @@ function renderReport(report) {
       "meta",
     ),
   );
+  if (report.request.user_question)
+    root.append(element("p", "用户问题：" + report.request.user_question));
+  if (report.knowledge_review_status === "human_review_required")
+    root.append(element("p", "当前知识包含未经人工复核的条款，相关结论需核验原文与适用性。", "notice"));
   const observations = new Map(
     report.request.observations.map((row) => [row.observation_id, row]),
   );
@@ -811,7 +815,7 @@ function renderReport(report) {
     section.append(
       element(
         "h3",
-        `${index + 1}. ${lastStatus?.checklist?.find((c) => c.check_id === finding.check_id)?.label || finding.check_id} · ${states[finding.status] || finding.status}`,
+        `${index + 1}. ${report.request.checks.find((c) => c.check_id === finding.check_id)?.query || finding.check_id} · ${states[finding.status] || finding.status}`,
       ),
     );
     section.append(element("p", finding.risk_description));

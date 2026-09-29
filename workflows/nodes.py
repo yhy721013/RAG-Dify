@@ -97,10 +97,11 @@ def _checklist(value):
 def validate_input(images, equipment_type, equipment_description, operating_state, work_context,
                    same_equipment_confirmed, workflow_run_id, checklist_json, snapshot_id,
                    dataset_id, workflow_version, model_id):
-    checklist = _checklist(checklist_json)
+    checklist = _checklist(checklist_json) if checklist_json is not None else None
+    _text(equipment_type, "设备类别", 100)
     if same_equipment_confirmed is not True:
         raise ValueError("必须确认所有图片属于同一台设备")
-    if equipment_type != checklist["equipment_type"]:
+    if checklist is not None and equipment_type != checklist["equipment_type"]:
         raise ValueError("设备类别不在当前试点范围")
     if operating_state not in ("运行", "停机", "检修", "未知"):
         raise ValueError("工况状态不合法")
@@ -134,7 +135,7 @@ def validate_input(images, equipment_type, equipment_description, operating_stat
     return {"request_json": _dump(request), "image_manifest_json": _dump(model_manifest),
             "equipment_context_json": _dump({key: request[key] for key in
                 ("equipment_type", "equipment_description", "operating_state", "work_context")}),
-            "checklist_json": _dump(checklist["checks"])}
+            "checklist_json": _dump(checklist["checks"] if checklist else [])}
 
 
 def build_checks(vision_json, request_json, checklist_json):
@@ -302,6 +303,9 @@ def finalize_payload(context_json, assessment_json):
         if uid not in checks or uid in seen:
             raise ValueError("模型评估检查项越界或重复")
         seen.add(uid)
+        if (context.get("request", {}).get("workflow_version") or "").startswith("portal-v3-dynamic"):
+            for name in ("risk_description", "applicability_reason", "recommendation"):
+                _complete_prose(item[name], name)
         unknown_evidence = set(_ids(item["evidence_ids"], "模型证据标识", 0, 3)) - set(checks[uid]["allowed_evidence_ids"])
         if unknown_evidence:
             raise ValueError("检查项 " + uid + " 的evidence_ids包含未授权证据：" + ",".join(sorted(unknown_evidence)))
@@ -326,3 +330,72 @@ def unpack_report(status_code, body, context_id):
     _text(report.get("markdown"), "报告Markdown", 200000)
     return {"report_id": report["report_id"], "markdown": report["markdown"],
             "validation_json": _dump(report["validation"])}
+
+
+# Portal v3: dynamic questions; legacy candidate workflows retain their original contract.
+def validate_dynamic_input(images, equipment_type, equipment_description, operating_state, work_context,
+                           same_equipment_confirmed, workflow_run_id, snapshot_id, dataset_id,
+                           workflow_version, model_id, user_question):
+    _text(equipment_type, "设备类别", 100)
+    _text(user_question, "用户问题", 4000)
+    # Reuse file identity and operating-state validation without a fixed checklist.
+    result = validate_input(images, equipment_type, equipment_description, operating_state, work_context,
+                            same_equipment_confirmed, workflow_run_id, None, snapshot_id,
+                            dataset_id, workflow_version, model_id)
+    request = _load(result["request_json"], "请求")
+    request["user_question"] = user_question
+    result["request_json"] = _dump(request)
+    context = _load(result["equipment_context_json"], "设备说明")
+    context["user_question"] = user_question
+    result["equipment_context_json"] = _dump(context)
+    return {key: result[key] for key in ("request_json", "image_manifest_json", "equipment_context_json")}
+
+
+def _complete_prose(value, label, maximum=4000):
+    text = _text(value, label, maximum)
+    if len(re.sub(r"\s", "", text)) < 8 or len(set(text.strip())) < 4:
+        raise ValueError(label + " 输出残缺，请查看模型原始输出及结构化输出；禁止保存无意义短文本")
+    return text
+
+
+def build_dynamic_checks(vision_json, request_json):
+    vision, request = _model_output(vision_json, "动态视觉输出"), _load(request_json, "请求")
+    _keys(vision, ("scope_status", "scope_reason", "observations", "checks"), "动态视觉输出")
+    _text(vision["scope_reason"], "范围说明")
+    if vision["scope_status"] != "same_equipment":
+        raise ValueError("图片无法确认同一设备或不可辨认：" + vision["scope_reason"])
+    raw, plan = vision["observations"], vision["checks"]
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 18:
+        raise ValueError("视觉观察必须包含1～18项")
+    if not isinstance(plan, list) or not 1 <= len(plan) <= 6:
+        raise ValueError("动态检索计划必须包含1～6项")
+    observations = []
+    for index, item in enumerate(raw, 1):
+        _keys(item, ("image_ids", "part", "visible_fact", "unknowns"), "视觉观察")
+        images = _observation_images(item["image_ids"], request["image_manifest"])
+        _text(item["part"], "观察部位", 200)
+        _complete_prose(item["visible_fact"], "可见事实", 3500)
+        if not isinstance(item["unknowns"], list) or len(item["unknowns"]) > 20:
+            raise ValueError("待确认事实数量无效")
+        for unknown in item["unknowns"]:
+            _text(unknown, "待确认事实")
+        observations.append({"observation_id": f"obs_{index:03d}", "image_ids": images,
+                             "visible_fact": item["part"] + "：" + item["visible_fact"], "unknowns": item["unknowns"]})
+    checks, seen = [], set()
+    for index, item in enumerate(plan, 1):
+        _keys(item, ("observation_indices", "query"), "动态检索方向")
+        indices = item["observation_indices"]
+        if (not isinstance(indices, list) or not 1 <= len(indices) <= 18
+            or any(type(n) is not int or not 1 <= n <= len(observations) for n in indices)
+            or len(set(indices)) != len(indices)):
+            raise ValueError("动态检查项必须关联本次真实观察序号")
+        query = _complete_prose(item["query"], "检索问题", 250).strip()
+        normalized = re.sub(r"\s", "", query)
+        if normalized in seen:
+            raise ValueError("动态检索问题重复")
+        seen.add(normalized)
+        checks.append({"check_id": f"check_{index:03d}",
+                       "observation_ids": [f"obs_{n:03d}" for n in indices], "query": query})
+    request["observations"], request["checks"] = observations, checks
+    return {"request_json": _dump(request), "observations_json": _dump(observations),
+            "checks": [_dump(item) for item in checks], "checks_json": _dump(checks)}
