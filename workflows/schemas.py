@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, TypeAdapter
@@ -41,6 +42,31 @@ class AssessmentDraft(StrictModel):
     findings: list[AssessmentFinding | InsufficientFinding] = Field(min_length=1, max_length=6)
 
 
+def generation_schema(schema):
+    r"""Keep backend validation separate from provider constrained decoding.
+
+    Text's unanchored \S means 'contains non-whitespace' in Pydantic/JSON
+    Schema. Some constrained decoders may instead treat it as the entire
+    generated string. Do not send this prose-only predicate to the model;
+    keep length constraints and all identifier patterns, and validate content
+    at the existing code/API boundaries.
+    """
+    result = deepcopy(schema)
+
+    def visit(value):
+        if isinstance(value, dict):
+            if value.get("type") == "string" and value.get("pattern") == r"\S":
+                value.pop("pattern")
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(result)
+    return result
+
+
 def output_schema(model, checklist):
     """将当前已配置清单编入生成约束，运行时仍按本次请求逐项检查。"""
     ids = [TypeAdapter(ID).validate_python(item["check_id"]) for item in checklist["checks"]]
@@ -56,4 +82,36 @@ def output_schema(model, checklist):
             schema["$defs"][name]["properties"]["check_id"]["enum"] = ids
     else:
         raise ValueError("未知的模型输出Schema")
-    return schema
+    return generation_schema(schema)
+
+
+class DynamicObservation(StrictModel):
+    image_ids: list[ImageID] = Field(min_length=1, max_length=4)
+    part: Text = Field(max_length=200)
+    visible_fact: Annotated[str, StringConstraints(min_length=8, max_length=3500, pattern=r"\S")]
+    unknowns: list[Text] = Field(max_length=20, description="图像不能确认的事实；局部特写应注明无法核实的整机归属与相关功能、尺寸或操作条件，不以scope_status代替此处记录。")
+
+
+class RetrievalDirection(StrictModel):
+    observation_indices: list[Annotated[int, Field(ge=1, le=18)]] = Field(min_length=1, max_length=18,
+        description="关联本次 observations 数组中的序号，从1开始，不是图片序号。")
+    query: Annotated[str, StringConstraints(min_length=8, max_length=250, pattern=r"\S")] = Field(
+        description="根据本次问题与可见事实生成中性技术检索问题；此阶段尚未检索，不填任何标准号、条款号、引用或违规结论。")
+
+
+class DynamicVisionResult(StrictModel):
+    scope_status: Literal["same_equipment", "different_equipment", "uncertain", "unreadable"] = Field(
+        description="判断图片是否可作为同一分析对象，不认证整机型号。单张可辨认且无实质冲突的部件特写选same_equipment；缺少整机信息记入unknowns。多图明确不同设备选different_equipment；对应关系不明或对象冲突选uncertain；有关部件完全不可辨认选unreadable。")
+    scope_reason: Text = Field(description="解释图片归属及可分析的边界；局部图片注明整机类别仅由用户提供，不能仅因未展示整机而拒绝分析。")
+    observations: list[DynamicObservation] = Field(min_length=1, max_length=18)
+    checks: list[RetrievalDirection] = Field(min_length=1, max_length=6)
+
+
+def dynamic_assessment_schema():
+    schema = AssessmentDraft.model_json_schema()
+    for name in ("AssessmentFinding", "InsufficientFinding"):
+        props = schema["$defs"][name]["properties"]
+        props["check_id"]["enum"] = [f"check_{n:03d}" for n in range(1, 7)]
+        for field in ("risk_description", "applicability_reason", "recommendation"):
+            props[field]["minLength"] = 8
+    return generation_schema(schema)

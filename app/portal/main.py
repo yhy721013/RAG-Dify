@@ -167,8 +167,8 @@ def create_app(config=None, project_root=ROOT):
         response = JSONResponse({"configured": settings.readiness(), "csrf_token": csrf,
             "current_snapshot": store.state("current_snapshot"), "worker_heartbeat": store.state("worker_heartbeat"),
             "max_pdf_bytes": settings.max_pdf_bytes, "max_pdf_pages": settings.max_pdf_pages,
-            "equipment_type": json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["equipment_type"],
-            "checklist": json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["checks"],
+            "equipment_type": "用户填写",
+            "checklist": [], "assessment_mode": "dynamic",
             "configuration_error": configuration_error, "configuration_fingerprint": fingerprint(settings),
             "portal_origin": settings.origin, "diagnostics": latest_diagnostics(manager),
             "maintenance": bool(store.state("maintenance"))})
@@ -419,7 +419,9 @@ def create_app(config=None, project_root=ROOT):
 
     @app.post("/api/assessments")
     async def assessment(images: list[UploadFile] = File(...), equipment_description: str = Form(""),
-                         operating_state: str = Form("未知"), work_context: str = Form(...),
+                         equipment_type: str = Form(""), user_question: str = Form(""),
+                         user_message: str | None = Form(None),
+                         operating_state: str = Form("未知"), work_context: str = Form("未知"),
                          same_equipment_confirmed: bool = Form(False), submission_id: str = Form(...)):
         settings.require_assessment()
         require_diagnostic_gate("assess")
@@ -428,10 +430,20 @@ def create_app(config=None, project_root=ROOT):
             raise DomainError("snapshot_not_allowed", "请先发布一个通过检索自检的知识版本", status=409)
         if not 1 <= len(images) <= 4 or not same_equipment_confirmed:
             raise DomainError("input_error", "需上传 1～4 张图片并确认属于同一设备")
+        # Preserve the published Dify input contract; never guess an equipment category
+        # from a free-form sentence or discard the user's full description/question.
+        if user_message is not None:
+            if not user_message.strip() or len(user_message) > 4000:
+                raise DomainError("input_error", "请填写设备与问题描述（最多4000字）")
+            user_question = equipment_description = user_message.strip()
+            equipment_type = "未单独指定，请结合用户描述与图片分析"
+            work_context = work_context.strip() or "未知"
         if operating_state not in {"运行", "停机", "检修", "未知"} or not work_context.strip() or max(len(work_context), len(equipment_description)) > 4000:
             raise DomainError("input_error", "请完整填写工况，说明不超过 4000 字")
         if not 1 <= len(submission_id) <= 100:
             raise DomainError("input_error", "提交标识无效")
+        if not equipment_type.strip() or len(equipment_type) > 100 or not user_question.strip() or len(user_question) > 4000:
+            raise DomainError("input_error", "请填写设备类别（最多100字）和用户问题（最多4000字）")
         saved = []
         for upload in images:
             path, checksum, size = await save_upload(upload, settings.data_root / "uploads", 5 * 1024 * 1024)
@@ -449,8 +461,8 @@ def create_app(config=None, project_root=ROOT):
                 path.unlink(missing_ok=True)
         if len({row["sha256"] for row in saved}) != len(saved):
             raise DomainError("input_error", "图片重复，请选择不同角度")
-        checklist = json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))
-        payload = {"snapshot_id": snapshot, "images": saved, "inputs": {"equipment_type": checklist["equipment_type"],
+        payload = {"snapshot_id": snapshot, "images": saved, "inputs": {"equipment_type": equipment_type,
+            "user_question": user_question,
             "equipment_description": equipment_description, "operating_state": operating_state,
             "work_context": work_context, "same_equipment_confirmed": True}}
         payload["configuration_fingerprint"] = fingerprint(settings)

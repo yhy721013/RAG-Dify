@@ -15,10 +15,12 @@ from app.safe_diagnostics import advice, public_error, scrub, upstream_details
 from app.settings import ROOT, configured
 
 
-def input_contract(payload, equipment_type):
+def input_contract(payload, equipment_type, *, dynamic=False):
     expected = {"images": "file-list", "equipment_type": "select", "equipment_description": "paragraph",
                 "operating_state": "select", "work_context": "paragraph", "same_equipment_confirmed": "checkbox",
                 "snapshot_id": "text-input"}
+    if dynamic:
+        expected.update(equipment_type="text-input", user_question="paragraph")
     forms = payload.get("user_input_form")
     if not isinstance(forms, list):
         return ["响应缺少 user_input_form"], []
@@ -55,10 +57,16 @@ def input_contract(payload, equipment_type):
         extensions = {v.lower() for v in field.get("allowed_file_extensions", [])}
         if extensions and (".png" not in extensions or not extensions & {".jpg", ".jpeg"}):
             errors.append("images 未同时允许 JPEG 和 PNG")
-    for name, limit in (("equipment_description", 4000), ("work_context", 4000), ("snapshot_id", 160)):
+    limits = [("equipment_description", 4000), ("work_context", 4000), ("snapshot_id", 160)]
+    if dynamic:
+        limits += [("user_question", 4000), ("equipment_type", 100)]
+    for name, limit in limits:
         if name in found and found[name][1].get("max_length") is not None and found[name][1]["max_length"] < limit:
             errors.append(f"{name} 的长度上限低于门户契约 {limit}")
-    for name, choices in (("equipment_type", {equipment_type}), ("operating_state", {"运行", "停机", "检修", "未知"})):
+    options = [("operating_state", {"运行", "停机", "检修", "未知"})]
+    if not dynamic:
+        options.append(("equipment_type", {equipment_type}))
+    for name, choices in options:
         if name in found and not choices <= set(found[name][1].get("options", [])):
             errors.append(name + " 缺少门户需要的选项")
     image_limit = payload.get("system_parameters", {}).get("image_file_size_limit")
@@ -220,7 +228,7 @@ def run_diagnostics(config, store=None, *, transport=None, version_probe=parser_
                 add("workflow.auth", "Workflow 真实鉴权", "pass", "应用模式为 Workflow", gates=["assess"], detail={"name": info.get("name"), "mode": info.get("mode")})
                 _, params = get(base + "/parameters", config.workflow_api_key)
                 equipment = json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8"))["equipment_type"]
-                errors, warnings = input_contract(params, equipment)
+                errors, warnings = input_contract(params, equipment, dynamic=True)
                 add("workflow.contract", "已发布 Workflow 输入契约", "fail" if errors else "warn" if warnings else "pass",
                     "字段、类型和限额可兼容" if not errors else "已发布工作流输入与门户不兼容", gates=["assess"],
                     detail={"mismatches": errors, "warnings": warnings}, suggestion="下载当前环境 DSL，核对导入目标并发布；不要只修改未发布草稿。")

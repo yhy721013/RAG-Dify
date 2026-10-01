@@ -69,7 +69,7 @@ def advice(code, details=None):
     if code in {"configuration_error", "configuration_changed", "configuration_conflict"}:
         return "打开首次配置，核对实际生效值与环境变量覆盖；先保存草稿，空闲时应用，再运行诊断。"
     if code in {"equipment_scope_error", "workflow_failed"}:
-        return "查看失败节点与脱敏错误；核对是否为同一台普通卧式金属车床、图片可辨认、模型可用及 Dify Secret 绑定。"
+        return "查看失败节点与脱敏错误；核对是否为同一台设备、问题及类别正确、图片可辨认、模型可用及 Dify Secret 绑定。"
     if "parse" in code:
         return "查看本任务解析日志。确认 MinerU 4.0.2 独立环境、模型资源及完整 PDF；修复后恢复原任务。"
     if code == "revision_conflict":

@@ -1,5 +1,20 @@
 # 设备安全风险辅助评估报告
 
+{% set statuses = {'evidence_supported_risk': '有证据支持的风险（待专业复核）', 'needs_confirmation': '需现场确认', 'insufficient_evidence': '依据不足，不能判定不符合'} %}
+{% if report.request.get('user_question') %}
+## 对本次问题的回答
+
+**用户问题：** {{ report.request.user_question | safe_text }}
+{% for item in report.findings %}
+- **{{ statuses[item.status] }}**：{{ item.risk_description | safe_text }}
+{% if item.citations %}
+  - 相关依据：{% for citation in item.citations %}{{ citation.standard_code | safe_text }} §{{ citation.clause_no | safe_text }}{% if not loop.last %}；{% endif %}{% endfor %}（原文及页码见下文）。
+{% else %}
+  - 未检索到可引用的直接依据，不据此认定符合或不符合。
+{% endif %}
+{% endfor %}
+{% endif %}
+
 ## 1. 评估信息
 
 - 报告编号：{{ report.report_id }}
@@ -42,10 +57,11 @@
 
 ## 4. 风险分析与整改建议
 {% for item in report.findings %}
-### {{ loop.index }}. {{ item.check_id | safe_text }}
+{% set matching = report.request.checks | selectattr('check_id', 'equalto', item.check_id) | list %}
+### {{ loop.index }}. {{ (matching[0].query if matching else item.check_id) | safe_text }}
 
 - 关联观察：{{ item.observation_ids | join(', ') | safe_text }}
-- 判断状态：{{ item.status }}
+- 判断状态：{{ statuses[item.status] }}
 - 风险描述：{{ item.risk_description | safe_text }}
 - 适用性说明：{{ item.applicability_reason | safe_text }}
 - 建议：{{ item.recommendation | safe_text }}
@@ -71,7 +87,7 @@ PDF 第 {{ span.pdf_page_index + 1 }} 页（零基索引 {{ span.pdf_page_index 
 ## 5. 证据不足与补充检查
 {% for item in report.findings %}
 {% if item.status != 'evidence_supported_risk' %}
-- {{ item.check_id | safe_text }}：{{ item.status }}，仍需补充依据或确认条件。
+- {{ item.check_id | safe_text }}：{{ statuses[item.status] }}，仍需补充依据或确认条件。
 {% endif %}
 {% for requirement in item.verification_required %}
 - {{ item.check_id | safe_text }}：{{ requirement | safe_text }}

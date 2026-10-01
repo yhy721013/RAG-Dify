@@ -351,7 +351,7 @@
         <div class="intro">
           <h2>用真实图片发起设备评估</h2>
           <p>
-            本轮覆盖普通卧式金属车床的六项机械防护检查。设备尺寸、运行状态和适用性仍需现场确认。
+            根据图片、设备说明和你的问题生成本次检索方向（最多六项）。设备功能、尺寸及标准适用性仍需核查。
           </p>
         </div>
         <form id="assessment-form" class="card">
@@ -369,21 +369,25 @@
           <details>
             <summary>怎样准备测试图片与工况</summary>
             <p>
-              使用同一台普通卧式金属车床的整机图和需要检查的防护细节。照片应清晰，不同设备分开提交；不能从照片确认的尺寸、联锁和运行状态请填写未知。
+              使用同一台设备的整机图或需要检查的部件细节。照片应清晰，不同设备分开提交；不能从照片确认的尺寸、联锁和运行状态请填写未知。
             </p>
             <p>
               工况示例格式：设备用途；运行/停机状态；人员在何处接近；作业或维护方式；哪些信息未知。示例格式不代表已确认的现场事实。
             </p>
             <div id="assessment-checklist"></div>
           </details>
-          <p id="assessment-prerequisites" class="notice"></p>
-          <label
-            >设备用途与结构说明<textarea
-              name="equipment_description"
-              rows="3"
+          <label>描述设备与问题<textarea
+              name="user_message"
+              required
+              rows="4"
               maxlength="4000"
-            ></textarea></label
-          ><label
+              placeholder="例如：这是船体车间16mm剪板机的急停按钮，图片中有什么安全问题，不符合哪个文件的哪个标准"
+            ></textarea></label>
+          <p class="hint">把设备名称、用途和想问的问题写在一起即可；不了解的信息不必猜测。</p>
+          <p id="assessment-prerequisites" class="notice"></p>
+          <details>
+            <summary>补充工况（选填）</summary>
+            <label
             >运行状态<select name="operating_state">
               <option>未知</option>
               <option>运行</option>
@@ -394,11 +398,12 @@
             >人员接近与作业背景<textarea
               name="work_context"
               rows="3"
-              required
               maxlength="4000"
               placeholder="无法从图片确认的信息请填写未知"
             ></textarea></label
-          ><label class="check"
+          >
+          </details>
+          <label class="check"
             ><input
               name="same_equipment_confirmed"
               type="checkbox"
@@ -442,7 +447,7 @@
         </article>
       </section>
       <footer>
-        条款原文来自人工批准版本 · 报告仅为评估草稿 · 本地源码测试台
+        条款复核状态以当前知识版本为准 · 报告仅为评估草稿 · 本地源码测试台
       </footer>
     </main>
   </body>

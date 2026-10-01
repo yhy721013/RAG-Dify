@@ -2,6 +2,12 @@
 
 本文件只描述本项目新入口。原证据服务四个接口不变，继续参照指南和 `config/*.schema.json`。
 
+2026-09-29 动态评估扩展（用户授权修复 PR #5）：门户生成八输入 `portal-v3-dynamic` 工作流，新增 `user_question`，`equipment_type` 从固定 select 改为 text-input；下文七输入描述属于此前版本。旧工作流须保留用于回退，新门户诊断要求八输入契约。
+
+`POST /api/assessments` 增加 `user_message`、`equipment_type`、`user_question`。网页采用单输入框：`user_message` 为1～4000字非空白文本，原文去首尾空白后同时作为 equipment_description 与 user_question；equipment_type 标注“未单独指定，请结合用户描述与图片分析”，不猜测车床类别。运行状态默认未知，work_context 选填、空白转为未知；1～4张图片及同一设备确认仍必须提供。显式字段客户端可以不传 user_message，但须提供非空 equipment_type（最多100字）及 user_question（最多4000字）。仅旧六项表单字段不足以提交新的动态任务，返回422；不静默代填问题。
+
+`POST /evidence/prepare` 的 PrepareRequest 增加可选 `user_question`（非空白、最多4000字），`portal-v3-dynamic*` 请求必须提供；旧请求可省略，序列化继续 exclude_none，不重写旧报告或数据库。问题随证据上下文和报告保留，并在门户回读时与原任务核对。公开请求Schema见 `config/prepare.schema.json`。路径、鉴权和状态码机制保持不变。
+
 2026-09-26 显式自动模式扩展：`POST /api/releases/preview` 与 `POST /api/releases` 新增可选 `mode`（`manual` 默认 / `automated`）和 `metadata`（文档 ID → standard_code/standard_name/edition/scope 字符串对象）。旧客户端默认人工模式。自动模式不接受 actor/cases/case_draft_id/confirmed_case_ids；服务端生成机器检查集合与原文回查题，不伪造复核人。预览返回 mode、machine_check_version、metadata_provenance、excluded、notice；原 preview_hash、依赖门禁与替换确认仍有效。全部条款不通过时返回422 machine_check_required，身份或范围缺失返回422 metadata_required，缺失字段见 details。排队后文档 revision 变化时 worker 拒绝导入；失败任务沿用原恢复接口。发布结果标记 automated_smoke / human_reviewed=false。
 
 ClauseRecord 增加 machine_checked 审核及边界状态，未新增数据库列。自动条款 evidence_complete=false、reviewed_by/at 为空。人工默认导入仍拒绝机器条款。门户证据允许已发布机器快照，completeness_issues 明示未经人工复核；上下文和 JSON 报告对含机器条款的版本增加 knowledge_review_status=human_review_required，Markdown 报告显示同样说明。现有四个证据路由、请求字段和 Workflow 七输入契约不变；已有报告和默认人工条款序列化不增加字段。自动回查记录不冒充人工评测，详情见 batch-runbook.md。
@@ -15,7 +21,7 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 | POST /api/setup/draft | values（向导字段白名单）、file_revision；保存完整草稿，不改运行配置 |
 | POST /api/setup/apply | id（草稿 ID）；空闲时设置维护锁，由独立控制进程应用并重启 evidence/worker |
 | POST /api/setup/confirmations | checks；记录当前配置下的人工确认，标记 manual_confirmation |
-| GET /api/setup/workflow.yml | source=active/draft、draft_id；生成同结构七输入无密钥 DSL |
+| GET /api/setup/workflow.yml | source=active/draft、draft_id；生成 portal-v3-dynamic 八输入无密钥 DSL |
 | POST /api/setup/initialize-dataset | 无请求字段；排队初始化空白专用库，非空库拒绝 |
 | GET /api/setup/tunnel | 本实例进程存活、临时地址与指定工具状态；不暴露证据密钥 |
 | POST /api/setup/tunnel/{start/stop/check} | 无请求字段；只管理自身登记的8002隧道，不接管其他进程 |
@@ -39,7 +45,7 @@ Portal 仅监听 127.0.0.1:8001。GET `/api/status` 建立 SameSite=Strict、Htt
 | POST /api/releases/preview | document_ids；返回基础版本、替换集合、待复核数、批准子集、preview_hash及case_draft |
 | POST /api/releases | 同一 document_ids、preview_hash、confirm_replacements、actor、cases；自动草稿另传case_draft_id及confirmed_case_ids，返回发布任务 |
 | GET /api/releases | 当前版本指针及全部已发布版本 |
-| POST /api/assessments | multipart images（1～4）、equipment_description、operating_state、work_context、same_equipment_confirmed、submission_id |
+| POST /api/assessments | multipart images（1～4）、user_message（统一输入）；或 equipment_type、equipment_description、user_question（显式输入）；operating_state/work_context选填，same_equipment_confirmed和submission_id必填 |
 | GET /api/jobs / GET /api/jobs/{id} | 有限任务状态、阶段、结果 ID、脱敏错误，不返回原始 SSE |
 | GET /api/jobs/{id}/diagnostics 或 /diagnostics.zip | 阶段、运行/报告 ID、有限事件/日志、检索结果，不含业务输入及报告正文 |
 | POST /api/jobs/{id}/retry | 仅失败/中断任务恢复；歧义运行禁止重发 |

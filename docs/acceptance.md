@@ -511,3 +511,12 @@
 - 剩余风险：以上证明本实例的技术链路和已知错误门禁通过有限次实测，不保证模型永不返回不完整内容，也不证明部件识别、适用性或建议准确。结构错误继续拒绝，未增加自动重试费用或模型自我修复循环；所有报告须人工复核。阶段E仍未开展，原资料包损坏PDF仍待补充。
 - 修复落到`D:\RAG`后，在任务队列为空时仅重载本实例门户8001；按登记PID、创建时间及监听进程父子关系核对身份，保留证据服务、worker和托管隧道。重新读取`/api/setup/workflow.yml`确认原生JSON Schema、状态分支及定稿代码均为新生成器；隧道地址未变。执行`.venv\Scripts\python.exe -X utf8 -m app.portal.cli doctor`，13项全部pass、parse/publish/assess门禁全开，end_to_end关联本轮双图报告；诊断本身model_invoked=false。重载后再次执行报告审计通过。
 - `git diff --check`通过；对135个跟踪/新增源码文件扫描当前本机密钥，匹配0；两份公开DSL无运行密钥或临时域名。Git CLI的非交互push dry-run因本机未配置GitHub凭据失败，因此选用用户已连接的GitHub插件发布专用修复分支，并核对远端树与本机已验证提交完全一致；未更改默认分支，也不在聊天或提交中传递访问令牌。
+
+
+## PR #5 动态问题分析集成修复（2026-09-29）
+
+- 用户授权保留 PR #5 的意图修复集成问题。基于原提交 `947e9309247fde76bc02887b8cf87be5b2581ec1`，将上传到根目录的 20 个文件归入原模块、模板、提示词、文档及 tests 目录；保留原提交历史。统一描述输入、动态检查项、局部照片识别、问题回答及两模型节点设计保持不变。
+- 补齐证据服务 `PrepareRequest.user_question` 与公开 JSON Schema。旧工作流允许省略该字段；`portal-v3-dynamic` 工作流必须提供非空问题。证据上下文和报告保留同一问题，新增保存/回读及旧契约兼容测试。接口文档说明八输入迁移、表单默认值和设备范围边界。
+- 验证命令：`.\.venv\Scripts\python.exe -X utf8 -m pytest -q`，结果 **271 passed, 2 warnings in 32.84s**。警告为既有 Starlette/httpx 与 AnyIO 弃用提示。`node --check app/static/portal.js` 通过。动态契约、生成 Schema、门户与可用性定向测试 50 项通过；新测试已进入默认 tests 集合。
+- 使用 `.\.venv\Scripts\python.exe -X utf8 -m workflows.build_portal --output data/portal/workflows/portal.dynamic.candidate.yml` 生成本机候选 DSL，核对 19 个节点、8 个输入（新增 user_question）、Secret 留空；两份模型输出 Schema 保存在同一忽略目录。生成文件按本机已保存配置绑定，HTTPS 地址仍需运行时诊断，不代表当前可达。
+- 云端剩余步骤：导入八输入 DSL、填写 Secret、发布与绑定应用，然后真实图片、检索和报告回读验证。本轮浏览器工具两次因内核/沙箱启动失败退出，未能导入 Dify；本机门户端口亦未连接。本轮没有修改远端 Workflow、实例密钥、知识库或历史报告，没有执行真实模型调用；测试使用合成协议数据，不是业务准确率或真实联调证明。动态模型识别与标准适用性仍须实际验证，自动入库的 machine_checked 状态和报告复核要求保留。

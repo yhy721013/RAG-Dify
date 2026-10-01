@@ -139,7 +139,7 @@ def mock_services(config, *, forbidden=False):
             assert request.headers["Authorization"] == "Bearer " + config.workflow_api_key
             return httpx.Response(200, json={"name": "synthetic-app", "mode": "workflow"})
         if path.endswith("/parameters"):
-            return httpx.Response(200, json=contract())
+            return httpx.Response(200, json=dynamic_contract())
         if path.endswith("/health"):
             assert "Authorization" not in request.headers
             return httpx.Response(503, json={"status": "not_ready", "database": True, "snapshot_available": False})
@@ -242,7 +242,7 @@ def test_setup_api_does_not_expose_secrets_or_allow_csrf(environment):
         assert response.status_code == 200
         dsl = client.get("/api/setup/workflow.yml?source=draft&draft_id=" + response.json()["id"])
         assert dsl.status_code == 200 and not any(secret in dsl.text for secret in config.secret_values())
-        assert "portal-v2-identifiers" in dsl.text and "diagnostic_mode" not in dsl.text
+        assert "portal-v3-dynamic" in dsl.text and "diagnostic_mode" not in dsl.text
 
 
 def test_worker_does_not_own_portal_control_processes(environment):
@@ -316,3 +316,12 @@ def test_repair_to_fallback_value_clears_startup_error(environment, monkeypatch)
         manager.apply_path.write_text(json.dumps({"status":"succeeded", "fingerprint": fingerprint(config)}), encoding="utf-8")
         monkeypatch.setattr(main, "bootstrap_settings", lambda: (config, ""))
         assert client.get("/api/status").json()["configuration_error"] == ""
+
+
+def dynamic_contract():
+    # Synthetic v3 parameters; keep the captured v2 fixture immutable.
+    from workflows.build_portal import build_portal
+    value = build_portal(PortalSettings(dataset_id="synthetic", evidence_public_url="https://example.invalid"),
+        json.loads((ROOT / "config/checklist.json").read_text(encoding="utf-8")))
+    fields = next(n["data"]["variables"] for n in value["workflow"]["graph"]["nodes"] if n["id"] == "start")
+    return {"user_input_form": [{f["type"]: f} for f in fields]}
